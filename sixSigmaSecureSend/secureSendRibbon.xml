@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<customUI onLoad="Ribbon_Load" xmlns="http://schemas.microsoft.com/office/2006/01/customui">
+  <ribbon>
+    <tabs>
+      <tab idMso="TabNewMailMessage">
+        <group id="group1" label="RTN Secure Email" getVisible="sendSecureVisible">
+          <button id="rtnsecurelogo"  label="Visit RTN Secure Center" size="large" screentip="Raytheon Secure Messaging Helper" tag="RTN Secure" onAction="linkToRTNSecure" supertip="This Outlook Addin was produced as part of a Six Sigma Project." getImage="returnRTNLock" enabled="true" showLabel="true"/>
+          <toggleButton id="toggleAddInActive" getPressed="addInActive" getImage="addInStatus" onAction="toggleAddInActive" label="Send Secure With [RSMG]" screentip="oh yeah" supertip="thats the way" tag="asdf" getDescription="mahDescription"/>  
+          <toggleButton id="toggleShowPane" onAction="toggleShowPane" label="Show Sidebar" showImage="true" getPressed="isPressed" imageMso="FrameCreateLeft"/>
+          <button id="numberExternal" getLabel="numberExternal" enabled="false" />
+        </group>
+      </tab>
+    </tabs>
+    <contextualTabs>
+      <tabSet idMso="TabComposeTools">
+        <tab idMso="TabMessage">
+          <group id="group1inline" label="RTN Secure Email">
+            <toggleButton id="toggleButton1inline" onAction="toggleButton1_Click" label="Show Sidebar" showImage="true" getPressed="isPressed" imageMso="FrameCreateRight"/>
+            <toggleButton id="toggleButton2inline" onAction="addInActive" label="Send Secure With [RSMG]" getImage="returnRTNLock" />
+          <button id="rtnsecurelogoinline"  label="Secure" screentip="Raytheon Secure Messaging Helper" size="large" tag="RTN Secure" onAction="linkToRTNSecure" supertip="This Outlook Addin was produced as part of a Six Sigma Project." getImage="returnRTNLock" enabled="true" showLabel="true"   />
+          </group>
+        </tab>
+      </tabSet>
+    </contextualTabs>
+  </ribbon>
+</customUI>
