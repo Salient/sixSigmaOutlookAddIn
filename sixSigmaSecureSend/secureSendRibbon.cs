@@ -37,6 +37,7 @@ namespace sixSigmaSecureSend
         {
             return (getEditorFromControl(control) as editorWrapper).addInVisible;
         }
+
         public void toggleShowPane(Office.IRibbonControl control, bool state)
         {
             
@@ -157,16 +158,20 @@ namespace sixSigmaSecureSend
 
             public static stdole.IPictureDisp Convert(System.Drawing.Image image)
             {
+                stdole.IPictureDisp temp = null;
                 try
                 {
-                    return (stdole.IPictureDisp)GetIPictureDispFromPicture(image);
-                } catch(System.ArgumentException)
+                    temp = (stdole.IPictureDisp)GetIPictureDispFromPicture(image);
+                    
+                } catch(Exception ex)
                 {
-                    Debug.Print("doing that thin agian...");
-
-                    return (stdole.IPictureDisp)GetIPictureDispFromPicture(image);
+                    if (ex is System.ArgumentException || ex is System.Runtime.InteropServices.ExternalException)
+                    {
+                        Debug.Print("doing that thin agian...");
+                        throw;
+                    }
                 }
-
+                return temp;
             }
         }
 

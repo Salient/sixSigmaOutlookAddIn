@@ -58,13 +58,12 @@ namespace sixSigmaSecureSend
 
         }
 
+        
 
         private void reviewEditors(Object sender, EventArgs e)
         {
             // stop triggering while we are servicing
             updateSuggestionFlag.Enabled = false;
-
-
             try
             {
                 foreach (var item in editorWrappersValue.Keys)
@@ -92,6 +91,7 @@ namespace sixSigmaSecureSend
 
                     // Check if heading outside of Raytheon
                     int numExternal = externalRecipients(emailMsg);
+                    wrapper.externalRecipients = numExternal;
 
                     if (wrapper.addInVisible != (numExternal>0))
                     {
@@ -117,7 +117,6 @@ namespace sixSigmaSecureSend
                         {
                             if (!wrapper.addInVisible)
                             {
-                                //wrapper.addInPaneVisible = true; // TODO - Add message in pane that setting secure with no external recipients does nothing
                                 wrapper.CustomTaskPane.Visible = true;
                                 wrapper.paneNoteNoEffect();
                             }
@@ -133,7 +132,7 @@ namespace sixSigmaSecureSend
 
                     if (statusChange)
                     {
-                        secureSendRibbon.Ribbon.Invalidate();
+                            secureSendRibbon.Ribbon.Invalidate();
                     }
 
                     //  Debug.Print("This message subject: " + emailMsg.Subject + ", have attachements: " + emailMsg.Attachments.Count + ", and sent is " + emailMsg.Sent);
@@ -154,7 +153,6 @@ namespace sixSigmaSecureSend
             //    must run when Outlook shuts down, see https://go.microsoft.com/fwlink/?LinkId=506785
 
             // Manual Application Quit Handler has been created in ThisAddIn_Startup to call this function instead.
-
             // Prevent from triggering during a shutdown, which would result in exceptions being thrown.
             updateSuggestionFlag.Stop();
             updateSuggestionFlag.Enabled = false;
@@ -339,7 +337,8 @@ namespace sixSigmaSecureSend
         private bool showSecureOptions = false;
         private bool suggestSecure = false;
         private bool showPane = false; // default to invisible
-
+        //private Timer blinker = null;
+        
         public editorWrapper(Outlook.Inspector Inspector)
         {
             RegisterCallbacks(Inspector);
@@ -359,6 +358,12 @@ namespace sixSigmaSecureSend
             {
                 ((Outlook.InspectorEvents_Event)Editor).Close +=
                 new Outlook.InspectorEvents_CloseEventHandler(editor_Close);
+
+                if ((Editor as Outlook.Inspector).CurrentItem is Outlook.MailItem)
+                {
+                    ((Editor as Outlook.Inspector).CurrentItem as Outlook.MailItem).PropertyChange += testfunc;
+
+                }
             }
             else
             {
@@ -373,7 +378,13 @@ namespace sixSigmaSecureSend
 
         }
 
-        void editor_Close()
+        void testfunc(object name)
+        {
+            Debug.Print("hoooo boy");
+            
+        }
+
+         void editor_Close()
         {
             if (taskPane != null)
             {
@@ -424,43 +435,42 @@ namespace sixSigmaSecureSend
             (taskPane.Control as secureSendPane).noteNoEffect();
         }
 
-
-        internal void refreshRibbon()
-        {
-            if (suggestSecure)
-            {
-                //blinkRibbon();
-            }
-            secureSendRibbon.Ribbon.Invalidate();
-        }
-
-        //private void blinkRibbon()
+        //internal void blinkRibbon()
         //{
-        //    int count = 3;
+        //    int step = 0;
 
-        //    Timer blinker = new Timer();
+        //    if (blinker != null)
+        //    {
+        //        Debug.Print("how interesting....");
+        //    }
+
+        //    blinker = new Timer();
         //    blinker.AutoReset = true;
-        //    blinker.Elapsed += new System.Timers.ElapsedEventHandler(blink);
-        //    blinker.Interval = 50;
+        //    blinker.Interval = 100;
+        //    blinker.Elapsed += new System.Timers.ElapsedEventHandler(tick);
         //    blinker.Enabled = true;
         //    blinker.Start();
 
-        //    void blink(Object sender, EventArgs e)
-        //    {
-        //        if (count%2 == 1)
+        //    void tick(Object sender, EventArgs e) {
+                
+        //        if (blinker == null)
         //        {
-
+        //            return;
         //        }
                 
+        //        if (step > 6) {
+        //            blinker.Stop();
+        //            blinker.Enabled = false;
+        //            blinker.Dispose();
+        //            blinker = null;
+        //        } else
+        //        {
+        //            addInVisible = (step++ % 2 == 0);
+        //            secureSendRibbon.Ribbon.Invalidate();
+        //        }
         //    }
-
-        //struct ribbonBlinker
-        //{
-        //    int count;
         //}
-
-        //}
-
+        
         public bool addInActive
         {
             get => showSecureOptions;

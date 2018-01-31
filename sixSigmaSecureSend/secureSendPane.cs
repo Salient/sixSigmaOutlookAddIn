@@ -19,6 +19,7 @@ namespace sixSigmaSecureSend
         public void setBox_addInActive(bool set)
         {
             this.checkBox_addInStatus.Checked = set;
+            this.label1.Visible = true;
         }
 
         // Callbacks
@@ -69,7 +70,9 @@ namespace sixSigmaSecureSend
                 {
                     this.label1.Text = text;
                 }
-            
+            this.label1.Visible = true;
+            this.label1.Show();
+
         }
     }
 }
