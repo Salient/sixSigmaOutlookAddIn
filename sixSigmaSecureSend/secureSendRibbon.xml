@@ -7,6 +7,7 @@
           <toggleButton id="toggleAddInActive" getPressed="addInActive" getImage="addInStatus" onAction="toggleAddInActive" label="Send Secure With [RSMG]" screentip="oh yeah" supertip="thats the way" tag="asdf" getDescription="mahDescription"/>  
           <toggleButton id="toggleShowPane" onAction="toggleShowPane" label="Show Sidebar" showImage="true" getPressed="isPressed" imageMso="FrameCreateLeft"/>
           <button id="numberExternal" getLabel="numberExternal" enabled="false" />
+          <button id="spacer" enabled="false" visible="false"/>
           <button id="rtnsecurelogo"  label="Visit RTN Secure Center" size="large" screentip="Raytheon Secure Messaging Helper" tag="RTN Secure" onAction="linkToRTNSecure" supertip="This Outlook Addin was produced as part of a Six Sigma Project." getImage="returnRTNLock" enabled="true" showLabel="true"/>
         </group>
       </tab>

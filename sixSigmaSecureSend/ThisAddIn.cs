@@ -48,20 +48,49 @@ namespace sixSigmaSecureSend
             updateSuggestionFlag = new Timer();
             updateSuggestionFlag.AutoReset = true;
             updateSuggestionFlag.Elapsed += new System.Timers.ElapsedEventHandler(reviewEditors);
-            updateSuggestionFlag.Interval = 5000;
-            updateSuggestionFlag.Enabled = true;
-            updateSuggestionFlag.Start();
+            updateSuggestionFlag.Interval = 3000;
 
-
+            if(editorWrappersValue.Count > 0)
+            {
+                // We have a mail editor open. Start Polling.
+                updateSuggestionFlag.Enabled = true;
+            }
+            
             ((Outlook.ApplicationEvents_11_Event)Application).Quit
 += new Outlook.ApplicationEvents_11_QuitEventHandler(ThisAddIn_Shutdown);
+        }
+
+        private void addWrapper(object editor)
+        {
+            if 
+        }
+
+        void Inspectors_NewInspector(Outlook.Inspector Inspector)
+        {
+            if (Inspector.CurrentItem is Outlook.MailItem)
+            {
+                editorWrappersValue.Add(Inspector, new editorWrapper(Inspector));
+                updateSuggestionFlag.Enabled = true; // Start polling (if not already)
+            }
+        }
+
+        void Explorers_NewExplorer(Outlook.Explorer Explorer)
+        {
+            // Don't need to check if it's a mail item; can only inline mail items
+            editorWrappersValue.Add(Explorer, new editorWrapper(Explorer));
+
+            updateSuggestionFlag.Enabled = true; // Start polling (if not already)
+        }
+
+        internal void removeWrapper(object editor)
+        {
 
         }
 
-        
-
         private void reviewEditors(Object sender, EventArgs e)
         {
+            Debug.Print("timer proc");
+
             // stop triggering while we are servicing
             updateSuggestionFlag.Enabled = false;
             try
@@ -91,7 +120,11 @@ namespace sixSigmaSecureSend
 
                     // Check if heading outside of Raytheon
                     int numExternal = externalRecipients(emailMsg);
-                    wrapper.externalRecipients = numExternal;
+                    if (wrapper.externalRecipients != numExternal)
+                    {
+                        wrapper.externalRecipients = numExternal;
+                        statusChange = true;   
+                    }
 
                     if (wrapper.addInVisible != (numExternal>0))
                     {
@@ -132,7 +165,7 @@ namespace sixSigmaSecureSend
 
                     if (statusChange)
                     {
-                            secureSendRibbon.Ribbon.Invalidate();
+                        secureSendRibbon.Ribbon.Invalidate();
                     }
 
                     //  Debug.Print("This message subject: " + emailMsg.Subject + ", have attachements: " + emailMsg.Attachments.Count + ", and sent is " + emailMsg.Sent);
@@ -154,7 +187,6 @@ namespace sixSigmaSecureSend
 
             // Manual Application Quit Handler has been created in ThisAddIn_Startup to call this function instead.
             // Prevent from triggering during a shutdown, which would result in exceptions being thrown.
-            updateSuggestionFlag.Stop();
             updateSuggestionFlag.Enabled = false;
             updateSuggestionFlag.Dispose();
         }
@@ -170,20 +202,6 @@ namespace sixSigmaSecureSend
             return new secureSendRibbon();
         }
 
-        void Inspectors_NewInspector(Outlook.Inspector Inspector)
-        {
-            if (Inspector.CurrentItem is Outlook.MailItem)
-            {
-                editorWrappersValue.Add(Inspector, new editorWrapper(Inspector));
-
-            }
-        }
-
-        void Explorers_NewExplorer(Outlook.Explorer Explorer)
-        {
-            // Don't need to check if it's a mail item; can only inline mail items
-            editorWrappersValue.Add(Explorer, new editorWrapper(Explorer));
-        }
 
         public Dictionary<Object, editorWrapper> editorWrappers
         {
@@ -337,7 +355,7 @@ namespace sixSigmaSecureSend
         private bool showSecureOptions = false;
         private bool suggestSecure = false;
         private bool showPane = false; // default to invisible
-        //private Timer blinker = null;
+        private Timer blinker = null;
         
         public editorWrapper(Outlook.Inspector Inspector)
         {
@@ -359,11 +377,10 @@ namespace sixSigmaSecureSend
                 ((Outlook.InspectorEvents_Event)Editor).Close +=
                 new Outlook.InspectorEvents_CloseEventHandler(editor_Close);
 
-                if ((Editor as Outlook.Inspector).CurrentItem is Outlook.MailItem)
-                {
-                    ((Editor as Outlook.Inspector).CurrentItem as Outlook.MailItem).PropertyChange += testfunc;
-
-                }
+                //if ((Editor as Outlook.Inspector).CurrentItem is Outlook.MailItem)
+                //{
+                //    ((Editor as Outlook.Inspector).CurrentItem as Outlook.MailItem).PropertyChange += testfunc;
+                //}
             }
             else
             {
@@ -375,17 +392,17 @@ namespace sixSigmaSecureSend
                 new secureSendPane(), "Secure Email", Editor);
             taskPane.VisibleChanged += new EventHandler(TaskPane_VisibleChanged);
             taskPane.Visible = showPane;
-
         }
 
-        void testfunc(object name)
-        {
-            Debug.Print("hoooo boy");
+        //void testfunc(string name)
+        //{
+        //    Debug.Print("Something changed - " + name);
+        //}
+
+
+        // Clean up after ourselves when an editor closes
+         void editor_Close() { 
             
-        }
-
-         void editor_Close()
-        {
             if (taskPane != null)
             {
                 Globals.ThisAddIn.CustomTaskPanes.Remove(taskPane);
@@ -393,21 +410,19 @@ namespace sixSigmaSecureSend
 
             taskPane = null;
 
-
             if (editor is Outlook.Inspector)
             {
-                ((Outlook.InspectorEvents_Event)editor).Close -=
-                new Outlook.InspectorEvents_CloseEventHandler(editor_Close);
-
+                ((Outlook.InspectorEvents_Event)editor).Close -= editor_Close;
                 Globals.ThisAddIn.editorWrappers.Remove((Outlook.Inspector)editor);
             }
             else
             {
-                ((Outlook.ExplorerEvents_Event)editor).Close -=
-                new Outlook.ExplorerEvents_CloseEventHandler(editor_Close);
+                ((Outlook.ExplorerEvents_Event)editor).Close -= editor_Close;
                 Globals.ThisAddIn.editorWrappers.Remove((Outlook.Explorer)editor);
             }
             editor = null;
+
+            if ()
         }
 
         void TaskPane_VisibleChanged(object sender, EventArgs e)
@@ -417,6 +432,7 @@ namespace sixSigmaSecureSend
                 secureSendRibbon.Ribbon.InvalidateControl("toggleButton1");
             }
         }
+
         public CustomTaskPane CustomTaskPane
         {
             get
@@ -446,31 +462,32 @@ namespace sixSigmaSecureSend
 
         //    blinker = new Timer();
         //    blinker.AutoReset = true;
-        //    blinker.Interval = 100;
+        //    blinker.Interval = 200;
         //    blinker.Elapsed += new System.Timers.ElapsedEventHandler(tick);
         //    blinker.Enabled = true;
-        //    blinker.Start();
+        
+        //    void tick(Object sender, EventArgs e)
+        //    {
 
-        //    void tick(Object sender, EventArgs e) {
-                
         //        if (blinker == null)
         //        {
         //            return;
         //        }
-                
-        //        if (step > 6) {
-        //            blinker.Stop();
+
+        //        if (step > 6)
+        //        {
         //            blinker.Enabled = false;
         //            blinker.Dispose();
         //            blinker = null;
-        //        } else
+        //        }
+        //        else
         //        {
         //            addInVisible = (step++ % 2 == 0);
         //            secureSendRibbon.Ribbon.Invalidate();
         //        }
         //    }
         //}
-        
+
         public bool addInActive
         {
             get => showSecureOptions;
