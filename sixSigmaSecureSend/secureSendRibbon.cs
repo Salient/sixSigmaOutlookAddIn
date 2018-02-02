@@ -18,107 +18,49 @@ namespace sixSigmaSecureSend
     {
         private static Office.IRibbonUI ribbon;
 
-        internal static Office.IRibbonUI Ribbon { get => ribbon; set => ribbon = value; }
+        internal static Office.IRibbonUI Ribbon { get => ribbon;}
 
         public secureSendRibbon() { }
 
         #region IRibbonExtensibility Members
-        
-        public string GetCustomUI(string ribbonID)
-        {
-            return GetResourceText("sixSigmaSecureSend.secureSendRibbon.xml");
-        }
+
+        public string GetCustomUI(string ribbonID) { return GetResourceText("sixSigmaSecureSend.secureSendRibbon.xml"); }
 
         #endregion
 
         #region Ribbon Callbacks
         //Create callback methods here. For more information about adding callback methods, visit https://go.microsoft.com/fwlink/?LinkID=271226
-        public bool sendSecureVisible(Office.IRibbonControl control)
-        {
-            return (getEditorFromControl(control) as editorWrapper).addInVisible;
-        }
-
-        public void toggleShowPane(Office.IRibbonControl control, bool state)
-        {
-            
-            CustomTaskPane secureSendPane = getPaneFromControl(control);
-            if (secureSendPane != null)
-            {
-                secureSendPane.Visible = state;
-            }
-        }
-
-
-        public IPictureDisp returnRTNSecureLogo(Office.IRibbonControl control)
-        {
-            return ImageConverter.Convert(Properties.Resources.rtnsecuretrans);
-        }
-
-        public IPictureDisp returnRTNLock(Office.IRibbonControl control)
-        {
-            return ImageConverter.Convert(Properties.Resources.rtnlock);
-        }
-            
+        public bool sendSecureVisible(Office.IRibbonControl control) { return editorWrapper.getWrapper(control).addInVisible; }
+        public void toggleShowPane(Office.IRibbonControl control, bool state) { editorWrapper.getWrapper(control).CustomTaskPane.Visible = state; }
+        public IPictureDisp returnRTNSecureLogo(Office.IRibbonControl control) { return ImageConverter.Convert(Properties.Resources.rtnsecuretrans); }
+        public IPictureDisp returnRTNLock(Office.IRibbonControl control) { return ImageConverter.Convert(Properties.Resources.rtnlock); }
+        public string addInStatus(Office.IRibbonControl control) { return editorWrapper.getWrapper(control).addInActive ? "AcceptTask" : "Private"; }
+        public bool? isPressed(Office.IRibbonControl control) { return editorWrapper.getWrapper(control)?.CustomTaskPane.Visible ?? false; }
+        public bool addInActive(Office.IRibbonControl control) { return editorWrapper.getWrapper(control).addInActive; }
+        public void linkToRTNSecure(Office.IRibbonControl control) { System.Diagnostics.Process.Start("http://web.onertn.ray.com/initiatives/rtnsecurecenter/"); }
 
         public string numberExternal(Office.IRibbonControl control)
         {
-            int numExternal = getEditorFromControl(control).externalRecipients;
+            int numExternal = editorWrapper.getWrapper(control).externalRecipients;
 
-            if (numExternal == 0)
-            {
-                return "There are no external recipients.";
-            }
-            if (numExternal == 1)
-            {
-                return "There is 1 external recipient.";
-            }
+            if (numExternal == 0) { return "There are no external recipients."; }
+            if (numExternal == 1) { return "There is 1 external recipient."; }
             return "There are " + numExternal + " external recipients.";
         }
 
-        public string addInStatus(Office.IRibbonControl control)
-        {
-            return  (getEditorFromControl(control) as editorWrapper).addInActive ? "AcceptTask" : "Private";
-        }
 
-        public bool isPressed(Office.IRibbonControl control)
-        {
-            CustomTaskPane secureSendPane = getPaneFromControl(control);
-            if (secureSendPane != null)
-            {
-               return secureSendPane.Visible;
-            }
-            else { return false; }
-        }
 
-        public bool addInActive(Office.IRibbonControl control)
+        public void toggleAddInActive(Office.IRibbonControl control, bool set)
         {
-            return getEditorFromControl(control).addInActive;
+            editorWrapper instance = editorWrapper.getWrapper(control);
+            instance.addInActive = set;
+            (instance.CustomTaskPane.Control as secureSendPane).setBox_addInActive(set);
+            ribbon.InvalidateControl("toggleAddInActive");
+            ThisAddIn.setSecure(ThisAddIn.GetMailItem(control), set);
         }
+        #endregion
 
-        private editorWrapper getEditorFromControl(Office.IRibbonControl control)
-        {
-            return Globals.ThisAddIn.editorWrappers[control.Context];
-        }
-
-        private CustomTaskPane getPaneFromControl(Office.IRibbonControl control)
-        {
-
-            if (control.Context is Outlook.Inspector || control.Context is Outlook.Explorer)
-            {
-                editorWrapper myEditor = Globals.ThisAddIn.editorWrappers[control.Context];
-                return myEditor.CustomTaskPane;
-            } else
-            {
-                Debug.Print("oh shnikee");
-                return null;
-            }
-        }
-
-        public void linkToRTNSecure(Office.IRibbonControl control)
-        {
-            System.Diagnostics.Process.Start("http://web.onertn.ray.com/initiatives/rtnsecurecenter/");
-        }
-        
+        #region Graphics Helper Functions
         internal class PictureConverter : AxHost
         {
             private PictureConverter() : base(String.Empty) { }
@@ -127,7 +69,7 @@ namespace sixSigmaSecureSend
             {
                 return (stdole.IPictureDisp)GetIPictureDispFromPicture(image);
             }
- 
+
             static public stdole.IPictureDisp IconToPictureDisp(Icon icon)
             {
                 return ImageToPictureDisp(icon.ToBitmap());
@@ -139,17 +81,6 @@ namespace sixSigmaSecureSend
             }
         }
 
-        
-        public void toggleAddInActive(Office.IRibbonControl control, bool set)
-        {
-            editorWrapper thisEditor = getEditorFromControl(control);
-            thisEditor.addInActive = set;
-            thisEditor.refreshPane();
-            ribbon.InvalidateControl("toggleAddInActive");
-            ThisAddIn.setSecure(ThisAddIn.GetMailItem(control), set);
-        }
-
-        
         internal class ImageConverter : System.Windows.Forms.AxHost
         {
             private ImageConverter() : base(null)
@@ -162,8 +93,9 @@ namespace sixSigmaSecureSend
                 try
                 {
                     temp = (stdole.IPictureDisp)GetIPictureDispFromPicture(image);
-                    
-                } catch(Exception ex)
+
+                }
+                catch (Exception ex)
                 {
                     if (ex is System.ArgumentException || ex is System.Runtime.InteropServices.ExternalException)
                     {
