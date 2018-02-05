@@ -48,8 +48,6 @@ namespace sixSigmaSecureSend
             return "There are " + numExternal + " external recipients.";
         }
 
-
-
         public void toggleAddInActive(Office.IRibbonControl control, bool set)
         {
             editorWrapper instance = editorWrapper.getWrapper(control);

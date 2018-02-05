@@ -150,7 +150,6 @@ namespace sixSigmaSecureSend
                     {
                         secureSendRibbon.Ribbon?.Invalidate();
                     }
-
                     //  Debug.Print("This message subject: " + emailMsg.Subject + ", have attachements: " + emailMsg.Attachments.Count + ", and sent is " + emailMsg.Sent);
                 }
             }
@@ -180,10 +179,10 @@ namespace sixSigmaSecureSend
         }
 
 
-        //protected override Microsoft.Office.Core.IRibbonExtensibility CreateRibbonExtensibilityObject()
-        //{
-        //    return new secureSendRibbon();
-        //}
+        protected override Microsoft.Office.Core.IRibbonExtensibility CreateRibbonExtensibilityObject()
+        {
+            return new secureSendRibbon();
+        }
 
 
         public Dictionary<Object, editorWrapper> editorWrappers
