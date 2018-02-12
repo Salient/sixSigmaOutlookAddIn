@@ -14,7 +14,7 @@ namespace sixSigmaSecureSend
         }
 
         delegate void StringArgReturningVoidDelegate();
-        
+
         // Helper functions
         public void setBox_addInActive(bool set)
         {
@@ -54,25 +54,35 @@ namespace sixSigmaSecureSend
 
         }
 
+        public void suggest()
+        {
+            string text = "It looks like you are sending an email with an attachment to recipients outside of Raytheon.\n\nRemember to safeguard sensitive or technical information by using PKI encryption or the Raytheon Secure Messaging Gateway.";
+
+            updateText(text);
+
+        }
+
         public void noteNoEffect()
         {
-
             string text = "You have added [RSMG] to the subject line, indicating you want to safeguard the information in this message when sending to recipients outside of Raytheon. This is an excellent habit, however, I couldn't help noticing there aren't any external recipients. \n\nRaytheon Secure Messaging has no effect with sending to other Raytheon recipients because it never leaves the Raytheon network, and the Raytheon network is always secure :-)";
 
+            updateText(text);
+        }
+
+        private void updateText(string text)
+        {
             // I will never understand all the nonsense created to deal with nonsense problems
             if (this.InvokeRequired)
-                {
+            {
                 this.Invoke(
-                    new MethodInvoker(delegate () { noteNoEffect(); }));
-
-                }
-                else
-                {
-                    this.label1.Text = text;
-                }
+                    new MethodInvoker(delegate () { updateText(text); }));
+            }
+            else
+            {
+                this.label1.Text = text;
+            }
             this.label1.Visible = true;
             this.label1.Show();
-
         }
     }
 }

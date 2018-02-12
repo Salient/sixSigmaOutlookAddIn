@@ -18,7 +18,7 @@ namespace sixSigmaSecureSend
     {
         private static Office.IRibbonUI ribbon;
 
-        internal static Office.IRibbonUI Ribbon { get => ribbon;}
+        internal static Office.IRibbonUI Ribbon { get => ribbon; }
 
         public secureSendRibbon() { }
 
@@ -30,18 +30,19 @@ namespace sixSigmaSecureSend
 
         #region Ribbon Callbacks
         //Create callback methods here. For more information about adding callback methods, visit https://go.microsoft.com/fwlink/?LinkID=271226
-        public bool sendSecureVisible(Office.IRibbonControl control) { return editorWrapper.getWrapper(control).addInVisible; }
-        public void toggleShowPane(Office.IRibbonControl control, bool state) { editorWrapper.getWrapper(control).CustomTaskPane.Visible = state; }
+        public bool sendSecureVisible(Office.IRibbonControl control) { return editorWrapper.getWrapper(control)?.addInVisible ?? false; }
+        public void toggleShowPane(Office.IRibbonControl control, bool state) { editorWrapper.getWrapper(control).getTaskPane.Visible = state; }
         public IPictureDisp returnRTNSecureLogo(Office.IRibbonControl control) { return ImageConverter.Convert(Properties.Resources.rtnsecuretrans); }
         public IPictureDisp returnRTNLock(Office.IRibbonControl control) { return ImageConverter.Convert(Properties.Resources.rtnlock); }
-        public string addInStatus(Office.IRibbonControl control) { return editorWrapper.getWrapper(control).addInActive ? "AcceptTask" : "Private"; }
-        public bool? isPressed(Office.IRibbonControl control) { return editorWrapper.getWrapper(control)?.CustomTaskPane.Visible ?? false; }
-        public bool addInActive(Office.IRibbonControl control) { return editorWrapper.getWrapper(control).addInActive; }
+        //        public string addInStatus(Office.IRibbonControl control) { return (editorWrapper.getWrapper(control)?.addInActive == null || editorWrapper.getWrapper(control).addInActive) ? "AcceptTask" : "Private"; }
+        public string addInStatus(Office.IRibbonControl control) { return (editorWrapper.getWrapper(control)?.addInActive ?? false) ? "AcceptTask" : "Private"; }
+        public bool isPressed(Office.IRibbonControl control) { return editorWrapper.getWrapper(control)?.getTaskPane.Visible ?? false; }
+        public bool addInActive(Office.IRibbonControl control) { return editorWrapper.getWrapper(control)?.addInActive ?? false; }
         public void linkToRTNSecure(Office.IRibbonControl control) { System.Diagnostics.Process.Start("http://web.onertn.ray.com/initiatives/rtnsecurecenter/"); }
 
         public string numberExternal(Office.IRibbonControl control)
         {
-            int numExternal = editorWrapper.getWrapper(control).externalRecipients;
+            int? numExternal = editorWrapper.getWrapper(control)?.externalRecipients;
 
             if (numExternal == 0) { return "There are no external recipients."; }
             if (numExternal == 1) { return "There is 1 external recipient."; }
@@ -52,7 +53,7 @@ namespace sixSigmaSecureSend
         {
             editorWrapper instance = editorWrapper.getWrapper(control);
             instance.addInActive = set;
-            (instance.CustomTaskPane.Control as secureSendPane).setBox_addInActive(set);
+            instance.getSecureSendPane.setBox_addInActive(set);
             ribbon.InvalidateControl("toggleAddInActive");
             ThisAddIn.setSecure(ThisAddIn.GetMailItem(control), set);
         }

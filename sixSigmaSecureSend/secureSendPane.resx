@@ -117,9 +117,4 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="label1.Text" xml:space="preserve">
-    <value>It looks like you are sending an email with an attachment to recipients outside of Raytheon.
-
-Remember to safeguard sensitive or technical information by using PKI encryption or the Raytheon Secure Messaging Gateway.</value>
-  </data>
 </root>
