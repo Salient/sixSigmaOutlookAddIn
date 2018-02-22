@@ -7,7 +7,7 @@
           <toggleButton id="toggleAddInActive" getPressed="addInActive" getImage="addInStatus" onAction="toggleAddInActive" label="Send Secure With [RSMG]" screentip="oh yeah" supertip="thats the way" tag="asdf" getDescription="mahDescription"/>  
           <toggleButton id="toggleShowPane" onAction="toggleShowPane" label="Show Sidebar" showImage="true" getPressed="isPressed" imageMso="FrameCreateLeft"/>
           <button id="numberExternal" getLabel="numberExternal" enabled="false" />
-          <button id="spacer" enabled="false" label="     " visible="true"/>
+          <button id="spacer" enabled="false" label="   _ " visible="true"/>
           <button id="rtnsecurelogo"  label="Visit RTN Secure Center" size="large" screentip="Raytheon Secure Messaging Helper" tag="RTN Secure" onAction="linkToRTNSecure" supertip="This Outlook Addin was produced as part of a Six Sigma Project." getImage="returnRTNLock" enabled="true" showLabel="true"/>
         </group>
       </tab>
@@ -19,7 +19,7 @@
           <toggleButton id="toggleAddInActive_inline" getPressed="addInActive" getImage="addInStatus" onAction="toggleAddInActive" label="Send Secure With [RSMG]" screentip="oh yeah" supertip="thats the way" tag="asdf" getDescription="mahDescription"/>  
           <toggleButton id="toggleShowPane_inline" onAction="toggleShowPane" label="Show Sidebar" showImage="true" getPressed="isPressed" imageMso="FrameCreateLeft"/>
           <button id="numberExternal_inline" getLabel="numberExternal" enabled="false" />
-                      <button id="spacer_inline" enabled="false" label="     " visible="true"/>
+                      <button id="spacer_inline" enabled="false" label="    _" visible="true"/>
           <button id="rtnsecurelogo_inline"  label="Visit RTN Secure Center" size="large" screentip="Raytheon Secure Messaging Helper" tag="RTN Secure" onAction="linkToRTNSecure" supertip="This Outlook Addin was produced as part of a Six Sigma Project." getImage="returnRTNLock" enabled="true" showLabel="true"/>
           </group>
         </tab>
