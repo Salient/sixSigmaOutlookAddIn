@@ -3,11 +3,9 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Office = Microsoft.Office.Core;
-using Outlook = Microsoft.Office.Interop.Outlook;
 using System.Diagnostics;
-using Microsoft.Office.Tools;
 using stdole;
-using System.Windows.Forms;
+// using System.Windows.Forms;
 using System.Drawing;
 
 
@@ -30,7 +28,15 @@ namespace sixSigmaSecureSend
 
         #region Ribbon Callbacks
         //Create callback methods here. For more information about adding callback methods, visit https://go.microsoft.com/fwlink/?LinkID=271226
-        public bool sendSecureVisible(Office.IRibbonControl control) { return editorWrapper.getWrapper(control)?.addInVisible ?? false; }
+        public bool sendSecureVisible(Office.IRibbonControl control) {
+
+            Debug.Print("active window hash: " + (Globals.ThisAddIn.Application.ActiveWindow() as object).GetHashCode());
+            Globals.ThisAddIn.mainThread.Send((s) =>
+            {
+                Debug.Print("main ui thread window hash: " + (Globals.ThisAddIn.Application.ActiveWindow() as object).GetHashCode());
+            }, null);
+
+            return editorWrapper.getWrapper(control)?.addInVisible ?? true; }
         public void toggleShowPane(Office.IRibbonControl control, bool state) { editorWrapper.getWrapper(control).getTaskPane.Visible = state; }
         public IPictureDisp returnRTNSecureLogo(Office.IRibbonControl control) { return ImageConverter.Convert(Properties.Resources.rtnsecuretrans); }
         public IPictureDisp returnRTNLock(Office.IRibbonControl control) { return ImageConverter.Convert(Properties.Resources.rtnlock); }
@@ -60,7 +66,7 @@ namespace sixSigmaSecureSend
         #endregion
 
         #region Graphics Helper Functions
-        internal class PictureConverter : AxHost
+        internal class PictureConverter : System.Windows.Forms.AxHost
         {
             private PictureConverter() : base(String.Empty) { }
 
