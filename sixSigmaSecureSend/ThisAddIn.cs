@@ -15,6 +15,8 @@ using Timer = System.Timers.Timer;
 // Add classifier check for attachments outbound
 // Add attachment size counter for RSMG
 
+// This is how I do.
+#pragma warning disable IDE1006 // Naming Styles
 
 namespace sixSigmaSecureSend
 {
@@ -22,8 +24,7 @@ namespace sixSigmaSecureSend
     {
         // Amazingly there is not a good way to execute a callback when the recipients field changes. Thus, we must periodically check if the field has changed ourselves. Ah, Microsoft...
         private Timer pollTimer;
-        internal SynchronizationContext mainThread;
-
+        
         // We can't add event callbacks to Application.Inspectors because after the event fires, Application.Inspectors is garbage collected?? 
         // Instead we have to save a handle to it at the class level and then we can do what we want
         Outlook.Inspectors _inspectors;
@@ -86,30 +87,17 @@ namespace sixSigmaSecureSend
             // stop triggering while we are servicing, just in case 
             pollTimer.Enabled = false;
 
-            // Maybe we only have to check the top window?
-
-            //try
-            //{
-
-            foreach (object wrapperKey in editorWrapperCollection.Keys)
-            {
-                Debug.Print("editor collection key hash: " + wrapperKey.GetHashCode());
-                doEditor(wrapperKey);
-            }
-
-            // }
-            //catch (Exception ex)
-            //{
-            //    //frak if i know
-            //}
+            //try {
+                foreach (object wrapperKey in editorWrapperCollection.Keys) { doEditor(wrapperKey); }
+            //} catch (Exception ex) { /*frak if i know*/ }
 
             pollTimer.Enabled = true;
         }
 
         private void doEditor(object item)
         {
-            try
-            {
+            //try
+            //{
                 bool statusChange = false;
 
                 Outlook.MailItem emailMsg = null;
@@ -120,18 +108,13 @@ namespace sixSigmaSecureSend
                     Outlook.Explorer exp = item as Outlook.Explorer;
                     emailMsg = exp.ActiveInlineResponse;
                 }
-                else
-                {
-                    emailMsg = GetMailItem(item);
-                }
-                if (emailMsg == null)
-                {
-                    return;
-                }
+                else { emailMsg = GetMailItem(item); }
+
+                if (emailMsg == null) { return; }
 
                 // We should be iterating through the collection, so don't need to check if it exists first
                 editorWrapper wrapper = editorWrapperCollection[item];
-                
+
                 // Check if heading outside of Raytheon
                 int numExternal = externalRecipients(emailMsg);
                 if (wrapper.externalRecipients != numExternal)
@@ -176,18 +159,17 @@ namespace sixSigmaSecureSend
 
                 if (statusChange)
                 {
-                    Debug.Print("Invalidating editor " + item.GetHashCode());
                     secureSendRibbon.Ribbon?.Invalidate();
                     wrapper.refreshPane();
                 }
                 //  Debug.Print("This message subject: " + emailMsg.Subject + ", have attachements: " + emailMsg.Attachments.Count + ", and sent is " + emailMsg.Sent);
-            }
+            //}
 
-            catch (InvalidOperationException)
-            {
-                // Do nothing, timer proc'd while window(s) were closing
-                // Just being a good digital citizen by catching it here
-            }
+            //catch (InvalidOperationException)
+            //{
+            //    // Do nothing, timer proc'd while window(s) were closing
+            //    // Just being a good digital citizen by catching it here
+            //}
         }
 
 
@@ -205,7 +187,7 @@ namespace sixSigmaSecureSend
 
         // Overload to satisfy Designer assumptions
         private void ThisAddIn_Shutdown(Object sender, EventArgs e) { }
-         
+
         //public Dictionary<Object, editorWrapper> editorWrappers { get => editorWrapperCollection; }
 
         //public static Outlook.MailItem GetMailItem(Office.IRibbonControl e) { return GetMailItem(e.Context); }
@@ -234,8 +216,9 @@ namespace sixSigmaSecureSend
 
         // Start Add-In features and logic functions...
 
-        internal static void setSecure(Outlook.MailItem mailItem, bool set)
+        internal static void setSecure(object editorWindow, bool set)
         {
+            Outlook.MailItem mailItem = GetMailItem(editorWindow);
             if (mailItem == null)
             {
                 Debug.Print("Error passing handle to container.");
@@ -289,7 +272,6 @@ namespace sixSigmaSecureSend
                 body = body.Trim(); // Clean up our act
                 mailItem.Body = (set) ? body + "\n\n" + bodyTag : body;
             }
-
         }
 
         private int externalRecipients(Outlook.MailItem mail)
@@ -359,7 +341,7 @@ namespace sixSigmaSecureSend
         private int numExternal = 0;
         private int numAttached = 0;
         private bool msgSetSecure = false;
-        private bool secureOptionsVisible = true; // default to invisible
+        private bool secureOptionsVisible = false; // default to invisible
         private bool showPane = false; // default to invisible
         private bool paneTrigd = false; // Some things we only want to do once after the window opens
 
@@ -368,8 +350,6 @@ namespace sixSigmaSecureSend
             // Save associated editor object, right now used for cleaning up callbacks
             editor = Editor;
 
-            Debug.Print("creating new wrapper for editor key:" + editor.GetHashCode());
-
             //Register Callbacks
             if (Editor is Outlook.Inspector && (Editor as Outlook.Inspector).CurrentItem is Outlook.MailItem)
             { ((Outlook.InspectorEvents_Event)Editor).Close += deconstructWrapper; }
@@ -377,25 +357,9 @@ namespace sixSigmaSecureSend
             else { throw new ArgumentException("Not correct type of editor"); }
 
             // Setup task pane
-            taskPane = (Globals.ThisAddIn.CustomTaskPanes.Add(new secureSendPane(), "Secure Email", Editor));
+            taskPane = (Globals.ThisAddIn.CustomTaskPanes.Add(new secureSendPane(this), "Secure Email", Editor));
             taskPane.VisibleChanged += new EventHandler(TaskPane_VisibleChanged);
             taskPane.Visible = showPane;
-
-            // Since we are probably creating this object from the timer object callback, 
-            // and the timer doesn't run from the main UI thread, and thus can't actually call the CustomTaskPanes.Add method,
-            // we need to pass it off to the Dispatcher
-
-
-            //        "screw you that's why" 
-            //                    -- Microsoft, probably
-
-            // SynchronizationContext uiContext = SynchronizationContext.Current;
-            // this.taskPane = (Globals.ThisAddIn.CustomTaskPanes.Add(new secureSendPane(), "Secure Email", Editor));
-
-            //Globals.ThisAddIn.mainThread.Send((s) =>
-            //{
-
-            //}, null);
         }
 
 
@@ -414,6 +378,8 @@ namespace sixSigmaSecureSend
         internal void refreshPane()
         {
             // Check state of editor and issue appropriate changes to task pane.
+            getSecureSendPane.setBox_addInActive(addInActive);
+            taskPane.Visible = showPane;
 
             if (!paneTrigd)
             { // Don't want to be super annoying
@@ -426,7 +392,16 @@ namespace sixSigmaSecureSend
                 //private bool secureOptionsVisible = false; // default to invisible
                 //private bool showPane = false; // default to invisible
             }
+        }
 
+        internal void updateState(bool set)
+        {
+            addInActive = set;
+            ThisAddIn.setSecure(editor,set);
+            //refreshPane();
+            getSecureSendPane.setBox_addInActive(addInActive);
+            secureSendRibbon.Ribbon?.InvalidateControl("toggleAddInActive");
+            secureSendRibbon.Ribbon?.InvalidateControl("toggleAddInActive_inline");
         }
 
         internal secureSendPane getSecureSendPane { get => taskPane.Control as secureSendPane; }
@@ -434,24 +409,22 @@ namespace sixSigmaSecureSend
 
         internal static editorWrapper getWrapper(Office.IRibbonControl control)
         {
-            Debug.Print("Getting wrapper for editor " + control.GetHashCode());
             if (Globals.ThisAddIn.editorWrapperCollection.ContainsKey(control.Context))
             {
-                Debug.Print("wrapper found");
                 return Globals.ThisAddIn.editorWrapperCollection[control.Context];
             }
-            Debug.Print("washed out");
             return null;
         }
 
-
-
         public bool addInActive { get => msgSetSecure; set => msgSetSecure = value; }
         public bool addInVisible { get => secureOptionsVisible; set => secureOptionsVisible = value; }
-        public bool addInPaneVisible { get => this.showPane; set => showPane = value; }
-        public bool paneShownBefore { get => this.paneTrigd; set => paneTrigd = value; }
-        public int externalRecipients { get => this.numExternal; set => numExternal = value; }
-        public int attachmentsCount { get => this.numAttached; set => numAttached = value; }
+        public bool addInPaneVisible { get => showPane; set => showPane = value; }
+        public bool paneShownBefore { get => paneTrigd; set => paneTrigd = value; }
+        public int externalRecipients { get => numExternal; set => numExternal = value; }
+
+        public int attachmentsCount { get => numAttached; set => numAttached = value; }
+
         public CustomTaskPane getTaskPane { get => taskPane; }
     }
 }
+#pragma warning restore IDE1006 // Naming Styles

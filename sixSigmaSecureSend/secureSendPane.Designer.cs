@@ -30,10 +30,10 @@
         {
             this.checkBox_addInStatus = new System.Windows.Forms.CheckBox();
             this.label1 = new System.Windows.Forms.Label();
-            this.pictureBox2 = new System.Windows.Forms.PictureBox();
+            this.sixsigmalogo = new System.Windows.Forms.PictureBox();
             this.rtnsecurelogo = new System.Windows.Forms.PictureBox();
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox2)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.sixsigmalogo)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.rtnsecurelogo)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             this.SuspendLayout();
@@ -52,7 +52,7 @@
             this.checkBox_addInStatus.TabIndex = 3;
             this.checkBox_addInStatus.Text = "Send Secure with [RSMG]";
             this.checkBox_addInStatus.UseVisualStyleBackColor = true;
-            this.checkBox_addInStatus.CheckedChanged += new System.EventHandler(this.checkBox1_CheckedChanged);
+            this.checkBox_addInStatus.CheckStateChanged += new System.EventHandler(this.checkBoxStateChanged);
             // 
             // label1
             // 
@@ -66,17 +66,18 @@
             this.label1.TabIndex = 8;
             this.label1.Click += new System.EventHandler(this.label1_Click_1);
             // 
-            // pictureBox2
+            // sixsigmalogo
             // 
-            this.pictureBox2.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
+            this.sixsigmalogo.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.pictureBox2.Image = global::sixSigmaSecureSend.Properties.Resources.R6S_defined_RGB;
-            this.pictureBox2.Location = new System.Drawing.Point(124, 638);
-            this.pictureBox2.Name = "pictureBox2";
-            this.pictureBox2.Size = new System.Drawing.Size(75, 45);
-            this.pictureBox2.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
-            this.pictureBox2.TabIndex = 9;
-            this.pictureBox2.TabStop = false;
+            this.sixsigmalogo.Image = global::sixSigmaSecureSend.Properties.Resources.R6S_defined_RGB;
+            this.sixsigmalogo.Location = new System.Drawing.Point(124, 638);
+            this.sixsigmalogo.Name = "sixsigmalogo";
+            this.sixsigmalogo.Size = new System.Drawing.Size(75, 45);
+            this.sixsigmalogo.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
+            this.sixsigmalogo.TabIndex = 9;
+            this.sixsigmalogo.TabStop = false;
+            this.sixsigmalogo.Click += new System.EventHandler(this.sixsigmalogo_Click);
             // 
             // rtnsecurelogo
             // 
@@ -114,15 +115,15 @@
             this.BackColor = System.Drawing.Color.Gainsboro;
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.None;
             this.CausesValidation = false;
-            this.Controls.Add(this.pictureBox2);
+            this.Controls.Add(this.checkBox_addInStatus);
+            this.Controls.Add(this.sixsigmalogo);
             this.Controls.Add(this.label1);
             this.Controls.Add(this.rtnsecurelogo);
-            this.Controls.Add(this.checkBox_addInStatus);
             this.Controls.Add(this.pictureBox1);
             this.MinimumSize = new System.Drawing.Size(205, 500);
             this.Name = "secureSendPane";
-            this.Size = new System.Drawing.Size(210, 686);
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox2)).EndInit();
+            this.Size = new System.Drawing.Size(240, 686);
+            ((System.ComponentModel.ISupportInitialize)(this.sixsigmalogo)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.rtnsecurelogo)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
             this.ResumeLayout(false);
@@ -135,6 +136,6 @@
         private System.Windows.Forms.CheckBox checkBox_addInStatus;
         private System.Windows.Forms.PictureBox rtnsecurelogo;
         private System.Windows.Forms.Label label1;
-        private System.Windows.Forms.PictureBox pictureBox2;
+        private System.Windows.Forms.PictureBox sixsigmalogo;
     }
 }

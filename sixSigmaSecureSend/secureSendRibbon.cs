@@ -8,7 +8,7 @@ using stdole;
 // using System.Windows.Forms;
 using System.Drawing;
 
-
+#pragma warning disable IDE1006 // Naming Styles
 namespace sixSigmaSecureSend
 {
     [ComVisible(true)]
@@ -32,7 +32,9 @@ namespace sixSigmaSecureSend
         public void toggleShowPane(Office.IRibbonControl control, bool state) { editorWrapper.getWrapper(control).getTaskPane.Visible = state; }
         public IPictureDisp returnRTNSecureLogo(Office.IRibbonControl control) { return ImageConverter.Convert(Properties.Resources.rtnsecuretrans); }
         public IPictureDisp returnRTNLock(Office.IRibbonControl control) { return ImageConverter.Convert(Properties.Resources.rtnlock); }
+
         public string addInStatus(Office.IRibbonControl control) { return (editorWrapper.getWrapper(control)?.addInActive ?? false) ? "AcceptTask" : "Private"; }
+
         public bool isPressed(Office.IRibbonControl control) { return editorWrapper.getWrapper(control)?.getTaskPane.Visible ?? false; }
         public bool addInActive(Office.IRibbonControl control) { return editorWrapper.getWrapper(control)?.addInActive ?? false; }
         public void linkToRTNSecure(Office.IRibbonControl control) { System.Diagnostics.Process.Start("http://web.onertn.ray.com/initiatives/rtnsecurecenter/"); }
@@ -46,14 +48,7 @@ namespace sixSigmaSecureSend
             return "There are " + numExternal + " external recipients.";
         }
 
-        public void toggleAddInActive(Office.IRibbonControl control, bool set)
-        {
-            editorWrapper instance = editorWrapper.getWrapper(control);
-            instance.addInActive = set;
-            instance.getSecureSendPane.setBox_addInActive(set);
-            ribbon.InvalidateControl("toggleAddInActive");
-            ThisAddIn.setSecure(control.Context, set);
-        }
+        public void toggleAddInActive(Office.IRibbonControl control, bool set)  { editorWrapper.getWrapper(control.Context).updateState(set); }
         #endregion
 
         #region Graphics Helper Functions
@@ -139,3 +134,4 @@ namespace sixSigmaSecureSend
         #endregion
     }
 }
+#pragma warning restore IDE1006 // Naming Styles
