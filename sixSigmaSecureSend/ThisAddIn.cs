@@ -23,8 +23,16 @@ namespace sixSigmaSecureSend
         // Amazingly there is not a good way to execute a callback when the recipients field changes. Thus, we must periodically check if the field has changed ourselves. Ah, Microsoft...
         private Timer pollTimer;
         internal SynchronizationContext mainThread;
-        private Dictionary<Object, editorWrapper> editorWrappersValue = new Dictionary<Object, editorWrapper>();
-        private System.Windows.Forms.Form dummyForm = null;
+
+        // We can't add event callbacks to Application.Inspectors because after the event fires, Application.Inspectors is garbage collected?? 
+        // Instead we have to save a handle to it at the class level and then we can do what we want
+        Outlook.Inspectors _inspectors;
+        Outlook.Explorers _explorers;
+
+        // Need a place to store state information for each editor.
+        internal Dictionary<Object, editorWrapper> editorWrapperCollection = new Dictionary<Object, editorWrapper>();
+
+        // private System.Windows.Forms.Form dummyForm = null;
 
         private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
@@ -38,42 +46,32 @@ namespace sixSigmaSecureSend
             // Thus, we create this form we don't want and do our best to hide it, so we can do something completely unrelated. 
             // That's how microsoft set up how it works, and somehow thought it was good.
 
-            dummyForm = new System.Windows.Forms.Form();
-            dummyForm.Opacity = 0;
-            dummyForm.Show();
-            dummyForm.Visible = false;
+            //dummyForm = new System.Windows.Forms.Form();
+            //dummyForm.Opacity = 0;
+            //dummyForm.Show();
+            //dummyForm.Visible = false;
 
-            mainThread = SynchronizationContext.Current;
-            
+            //mainThread = SynchronizationContext.Current;
 
             // Initialize timer object before possibly adding editor instances
             pollTimer = new Timer(2000);
             pollTimer.AutoReset = true;
-            //pollTimer.Elapsed += new System.Timers.ElapsedEventHandler(reviewEditors);
             pollTimer.Elapsed += reviewEditors;
 
-
-            // Plan _was_ to do this with events and callbacks, but the whole VSTO/C# framework is too terrible to really support doing that
-            // And since we have a poll timer going anyway, might as well just check everything all the time :-\
-
-            // May the god of efficiency grant me mercy, it is not my fault...
+            // Store handles to window collections, because otherwise C# stupidty abounds
+            _inspectors = Application.Inspectors;
+            _explorers = Application.Explorers;
 
 
             // If somehow plugin is loading after windows are already open, find them all and bag 'n tag
-            //foreach (Outlook.Inspector inspector in this.Application.Inspectors) { editorWrappersValue.Add(inspector, new editorWrapper(inspector)); }
-            //foreach (Outlook.Explorer explorer in this.Application.Explorers) { editorWrappersValue.Add(explorer, new editorWrapper(explorer)); }
+            foreach (Outlook.Inspector inspector in _inspectors) { editorWrapperCollection.Add(inspector, new editorWrapper(inspector)); }
+            foreach (Outlook.Explorer explorer in _explorers) { editorWrapperCollection.Add(explorer, new editorWrapper(explorer)); }
 
-            //// Register new callbacks to catch new editors opening
-            ////this.Application.Inspectors.NewInspector += (s) => { editorWrappersValue.Add(s, new editorWrapper(s)); };
-            ////this.Application.Explorers.NewExplorer += (s) => { editorWrappersValue.Add(s, new editorWrapper(s)); };
+            // Register new callbacks to catch new editors opening
+            _inspectors.NewInspector += (s) => { editorWrapperCollection.Add(s, new editorWrapper(s)); };
+            _explorers.NewExplorer += (s) => { editorWrapperCollection.Add(s, new editorWrapper(s)); };
 
-            //this.Application.Inspectors.NewInspector += new Outlook.InspectorsEvents_NewInspectorEventHandler(test);
-            //this.Application.Explorers.NewExplorer += new Outlook.ExplorersEvents_NewExplorerEventHandler(test);
-
-            //Application.Inspectors.NewInspector += new Outlook.InspectorsEvents_NewInspectorEventHandler(test);
-            // Application.Explorers.NewExplorer += new Outlook.ExplorersEvents_NewExplorerEventHandler(test);
-
-
+            // Start periodic check
             pollTimer.Enabled = true;
 
             ((Outlook.ApplicationEvents_11_Event)Application).Quit += new Outlook.ApplicationEvents_11_QuitEventHandler(ThisAddIn_Shutdown);
@@ -81,29 +79,7 @@ namespace sixSigmaSecureSend
 
         // Required to create custom ribbon
         protected override Microsoft.Office.Core.IRibbonExtensibility CreateRibbonExtensibilityObject() { return new secureSendRibbon(); }
-        
-        //private void addWrapper(object editor, EventArgs e) {
-        //    editorWrappersValue.Add(editor, new editorWrapper(editor));
-        //}
 
-        //private void startStopPoll() {
-        //    bool run = false;
-
-        //    foreach (Object editor in editorWrappersValue.Keys) {
-        //        Outlook.MailItem instance = GetMailItem(editor);
-        //        // Test reading or editing message
-        //        run = (instance != null && !instance.Sent);
-
-        //        if (run) { break; } // If there is at least one open editor, don't bother checking the rest
-        //    }
-
-        //    pollTimer.Enabled = run;
-        //}
-
-        internal static Outlook.Application getApp
-        {
-            get => Globals.ThisAddIn.Application;
-        }
         private void reviewEditors(Object sender, EventArgs e)
         {
             //Debug.Print("timer proc")
@@ -111,35 +87,17 @@ namespace sixSigmaSecureSend
             pollTimer.Enabled = false;
 
             // Maybe we only have to check the top window?
-            object topWindow = Application.ActiveWindow();
-            //if (item != topWindow)
-            //{
-            //    continue;
-            //}
 
             //try
             //{
 
-                foreach (Outlook.Inspector inspector in this.Application.Inspectors)
-                {
-                    if (!editorWrappersValue.ContainsKey(inspector))
-                    {
-                        editorWrappersValue.Add(inspector, new editorWrapper(inspector));
-                    }
+            foreach (object wrapperKey in editorWrapperCollection.Keys)
+            {
+                Debug.Print("editor collection key hash: " + wrapperKey.GetHashCode());
+                doEditor(wrapperKey);
+            }
 
-                    doEditor(inspector);
-                }
-
-                foreach (Outlook.Explorer explorer in this.Application.Explorers)
-                {
-                    if (!editorWrappersValue.ContainsKey(explorer))
-                    {
-                        editorWrappersValue.Add(explorer, new editorWrapper(explorer));
-                    }
-
-                    doEditor(explorer);
-                }
-            //}
+            // }
             //catch (Exception ex)
             //{
             //    //frak if i know
@@ -171,8 +129,9 @@ namespace sixSigmaSecureSend
                     return;
                 }
 
-                editorWrapper wrapper = editorWrappersValue[item];
-
+                // We should be iterating through the collection, so don't need to check if it exists first
+                editorWrapper wrapper = editorWrapperCollection[item];
+                
                 // Check if heading outside of Raytheon
                 int numExternal = externalRecipients(emailMsg);
                 if (wrapper.externalRecipients != numExternal)
@@ -246,12 +205,10 @@ namespace sixSigmaSecureSend
 
         // Overload to satisfy Designer assumptions
         private void ThisAddIn_Shutdown(Object sender, EventArgs e) { }
+         
+        //public Dictionary<Object, editorWrapper> editorWrappers { get => editorWrapperCollection; }
 
-
-        
-        public Dictionary<Object, editorWrapper> editorWrappers { get => editorWrappersValue; }
-
-        public static Outlook.MailItem GetMailItem(Office.IRibbonControl e) { return GetMailItem(e.Context); }
+        //public static Outlook.MailItem GetMailItem(Office.IRibbonControl e) { return GetMailItem(e.Context); }
 
         public static Outlook.MailItem GetMailItem(Object editor)
         {
@@ -393,6 +350,7 @@ namespace sixSigmaSecureSend
     {
         // Use email composer as key 
         private Object editor;
+
         // Custom task pane objects are instanced per email editor; ribbons are single global instance but affect each editor individually. Go figure.
         // Hold reference to task pane object for this instance.
         private CustomTaskPane taskPane;
@@ -401,7 +359,7 @@ namespace sixSigmaSecureSend
         private int numExternal = 0;
         private int numAttached = 0;
         private bool msgSetSecure = false;
-        private bool secureOptionsVisible = false; // default to invisible
+        private bool secureOptionsVisible = true; // default to invisible
         private bool showPane = false; // default to invisible
         private bool paneTrigd = false; // Some things we only want to do once after the window opens
 
@@ -410,6 +368,8 @@ namespace sixSigmaSecureSend
             // Save associated editor object, right now used for cleaning up callbacks
             editor = Editor;
 
+            Debug.Print("creating new wrapper for editor key:" + editor.GetHashCode());
+
             //Register Callbacks
             if (Editor is Outlook.Inspector && (Editor as Outlook.Inspector).CurrentItem is Outlook.MailItem)
             { ((Outlook.InspectorEvents_Event)Editor).Close += deconstructWrapper; }
@@ -417,7 +377,9 @@ namespace sixSigmaSecureSend
             else { throw new ArgumentException("Not correct type of editor"); }
 
             // Setup task pane
-
+            taskPane = (Globals.ThisAddIn.CustomTaskPanes.Add(new secureSendPane(), "Secure Email", Editor));
+            taskPane.VisibleChanged += new EventHandler(TaskPane_VisibleChanged);
+            taskPane.Visible = showPane;
 
             // Since we are probably creating this object from the timer object callback, 
             // and the timer doesn't run from the main UI thread, and thus can't actually call the CustomTaskPanes.Add method,
@@ -430,12 +392,10 @@ namespace sixSigmaSecureSend
             // SynchronizationContext uiContext = SynchronizationContext.Current;
             // this.taskPane = (Globals.ThisAddIn.CustomTaskPanes.Add(new secureSendPane(), "Secure Email", Editor));
 
-            Globals.ThisAddIn.mainThread.Send((s) =>
-            {
-                this.taskPane = (Globals.ThisAddIn.CustomTaskPanes.Add(new secureSendPane(), "Secure Email", Editor));
-                taskPane.VisibleChanged += new EventHandler(TaskPane_VisibleChanged);
-                taskPane.Visible = showPane;
-            }, null);
+            //Globals.ThisAddIn.mainThread.Send((s) =>
+            //{
+
+            //}, null);
         }
 
 
@@ -443,7 +403,7 @@ namespace sixSigmaSecureSend
         void deconstructWrapper()
         {
             if (taskPane != null) { Globals.ThisAddIn.CustomTaskPanes.Remove(taskPane); taskPane = null; }
-            if (Globals.ThisAddIn.editorWrappers.ContainsKey(editor)) { Globals.ThisAddIn.editorWrappers.Remove(editor); }
+            if (Globals.ThisAddIn.editorWrapperCollection.ContainsKey(editor)) { Globals.ThisAddIn.editorWrapperCollection.Remove(editor); }
 
             if (editor is Outlook.Inspector) { ((Outlook.InspectorEvents_Event)editor).Close -= deconstructWrapper; }
             else if (editor is Outlook.Explorer) { ((Outlook.ExplorerEvents_Event)editor).Close -= deconstructWrapper; }
@@ -475,14 +435,16 @@ namespace sixSigmaSecureSend
         internal static editorWrapper getWrapper(Office.IRibbonControl control)
         {
             Debug.Print("Getting wrapper for editor " + control.GetHashCode());
-            if (Globals.ThisAddIn.editorWrappers.ContainsKey(control.Context))
+            if (Globals.ThisAddIn.editorWrapperCollection.ContainsKey(control.Context))
             {
-                return Globals.ThisAddIn.editorWrappers[control.Context];
+                Debug.Print("wrapper found");
+                return Globals.ThisAddIn.editorWrapperCollection[control.Context];
             }
+            Debug.Print("washed out");
             return null;
         }
 
-        
+
 
         public bool addInActive { get => msgSetSecure; set => msgSetSecure = value; }
         public bool addInVisible { get => secureOptionsVisible; set => secureOptionsVisible = value; }

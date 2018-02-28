@@ -28,19 +28,10 @@ namespace sixSigmaSecureSend
 
         #region Ribbon Callbacks
         //Create callback methods here. For more information about adding callback methods, visit https://go.microsoft.com/fwlink/?LinkID=271226
-        public bool sendSecureVisible(Office.IRibbonControl control) {
-
-            Debug.Print("active window hash: " + (Globals.ThisAddIn.Application.ActiveWindow() as object).GetHashCode());
-            Globals.ThisAddIn.mainThread.Send((s) =>
-            {
-                Debug.Print("main ui thread window hash: " + (Globals.ThisAddIn.Application.ActiveWindow() as object).GetHashCode());
-            }, null);
-
-            return editorWrapper.getWrapper(control)?.addInVisible ?? true; }
+        public bool sendSecureVisible(Office.IRibbonControl control) { return editorWrapper.getWrapper(control)?.addInVisible ?? false; }
         public void toggleShowPane(Office.IRibbonControl control, bool state) { editorWrapper.getWrapper(control).getTaskPane.Visible = state; }
         public IPictureDisp returnRTNSecureLogo(Office.IRibbonControl control) { return ImageConverter.Convert(Properties.Resources.rtnsecuretrans); }
         public IPictureDisp returnRTNLock(Office.IRibbonControl control) { return ImageConverter.Convert(Properties.Resources.rtnlock); }
-        //        public string addInStatus(Office.IRibbonControl control) { return (editorWrapper.getWrapper(control)?.addInActive == null || editorWrapper.getWrapper(control).addInActive) ? "AcceptTask" : "Private"; }
         public string addInStatus(Office.IRibbonControl control) { return (editorWrapper.getWrapper(control)?.addInActive ?? false) ? "AcceptTask" : "Private"; }
         public bool isPressed(Office.IRibbonControl control) { return editorWrapper.getWrapper(control)?.getTaskPane.Visible ?? false; }
         public bool addInActive(Office.IRibbonControl control) { return editorWrapper.getWrapper(control)?.addInActive ?? false; }
@@ -61,7 +52,7 @@ namespace sixSigmaSecureSend
             instance.addInActive = set;
             instance.getSecureSendPane.setBox_addInActive(set);
             ribbon.InvalidateControl("toggleAddInActive");
-            ThisAddIn.setSecure(ThisAddIn.GetMailItem(control), set);
+            ThisAddIn.setSecure(control.Context, set);
         }
         #endregion
 
