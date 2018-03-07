@@ -48,7 +48,10 @@ namespace sixSigmaSecureSend
             return "There are " + numExternal + " external recipients.";
         }
 
-        public void toggleAddInActive(Office.IRibbonControl control, bool set)  { editorWrapper.getWrapper(control.Context).updateState(set); }
+        public void toggleAddInActive(Office.IRibbonControl control, bool set)  { editorWrapper.getWrapper(control).updateState(set); }
+
+        public void toggleDelay(Office.IRibbonControl control, bool set) { editorWrapper.getWrapper(control).toggleDelay = set;  }
+        public bool isDelaySet(Office.IRibbonControl control) { return editorWrapper.getWrapper(control).toggleDelay; }
         #endregion
 
         #region Graphics Helper Functions

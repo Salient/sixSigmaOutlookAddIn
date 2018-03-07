@@ -67,6 +67,13 @@ namespace sixSigmaSecureSend
             updateText(text);
 
         }
+        public void stdtext()
+        {
+            string text = "Always remember, safeguarding the integrity of sensitive information is a personal responsibility critical to protecting national interests, corporate reputation, and the warfighter. If this message contains technical detail or potentially sensitive information, consider adding [RSMG] to the subject line.";
+
+            updateText(text);
+
+        }
 
         public void noteNoEffect()
         {
@@ -92,14 +99,13 @@ namespace sixSigmaSecureSend
             else
             {
                 this.label1.Text = text;
+                this.label1.Visible = true;
+                this.label1.Show();
             }
-            this.label1.Visible = true;
-            this.label1.Show();
         }
 
         private void checkBoxStateChanged(object sender, EventArgs e)
         {
-            Debug.Print("checkbox state changed: " + e);
             myWrapper.updateState(checkBox_addInStatus.Checked);
         }
     }

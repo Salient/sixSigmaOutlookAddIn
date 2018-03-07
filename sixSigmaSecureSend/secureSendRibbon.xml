@@ -3,12 +3,15 @@
   <ribbon>
     <tabs>
       <tab idMso="TabNewMailMessage">
-        <group id="group1" label="RTN Secure Email" getVisible="sendSecureVisible">
+          <group id="group1" label="RTN Secure Email" getVisible="sendSecureVisible">
           <toggleButton id="toggleAddInActive" getPressed="addInActive" getImage="addInStatus" onAction="toggleAddInActive" label="Send Secure With [RSMG]" screentip="oh yeah" supertip="thats the way" tag="asdf" getDescription="mahDescription"/>  
           <toggleButton id="toggleShowPane" onAction="toggleShowPane" label="Show Sidebar" showImage="true" getPressed="isPressed" imageMso="FrameCreateLeft"/>
           <button id="numberExternal" getLabel="numberExternal" enabled="false" />
           <button id="spacer" enabled="false" label="     " visible="true"/>
           <button id="rtnsecurelogo"  label="Visit RTN Secure Center" size="large" screentip="Raytheon Secure Messaging Helper" tag="RTN Secure" onAction="linkToRTNSecure" supertip="This Outlook Addin was produced as part of a Six Sigma Project." getImage="returnRTNLock" enabled="true" showLabel="true"/>
+        </group>
+              <group id="delayOption">
+        <toggleButton id="delayButton" label="Outbox Send Delay" getPressed="isDelaySet" imageMso="DelayDeliveryOutlook" onAction="toggleDelay" size="large" screentip="Prevent instant Send Regret!" supertip="This option holds email in the Outbox for 30 seconds after clicking 'Send' before actually sending." />
         </group>
       </tab>
     </tabs>
@@ -21,7 +24,10 @@
           <button id="numberExternal_inline" getLabel="numberExternal" enabled="false" />
                       <button id="spacer_inline" enabled="false" label="     " visible="true"/>
           <button id="rtnsecurelogo_inline"  label="Visit RTN Secure Center" size="large" screentip="Raytheon Secure Messaging Helper" tag="RTN Secure" onAction="linkToRTNSecure" supertip="This Outlook Addin was produced as part of a Six Sigma Project." getImage="returnRTNLock" enabled="true" showLabel="true"/>
-          </group>
+          </group>   
+            <group id="delayOption_inline">
+        <toggleButton id="delayButton_inline" label="Outbox Send Delay" getPressed="isDelaySet" imageMso="DelayDeliveryOutlook" onAction="toggleDelay"  size="large" screentip="Prevent instant Send Regret!" supertip="This option holds email in the Outbox for 30 seconds after clicking 'Send' before actually sending." />
+        </group>
         </tab>
       </tabSet>
     </contextualTabs>
