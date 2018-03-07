@@ -8,6 +8,8 @@ using System.Diagnostics;
 
 
 using Timer = System.Timers.Timer;
+using System.Threading.Tasks;
+using System.Threading;
 
 
 // APP FEATURE LIST
@@ -32,28 +34,68 @@ namespace sixSigmaSecureSend
         Outlook.Inspectors _inspectors;
         Outlook.Explorers _explorers;
 
+        internal SynchronizationContext mainThread;
+        private System.Windows.Forms.Form dummyForm = null;
+
         // Need a place to store state information for each editor.
         internal Dictionary<Object, editorWrapper> editorWrapperCollection = new Dictionary<Object, editorWrapper>();
 
         // Required to create custom ribbon
         protected override Microsoft.Office.Core.IRibbonExtensibility CreateRibbonExtensibilityObject() { return new secureSendRibbon(); }
 
-        private void ThisAddIn_Startup(object sender, System.EventArgs e)
+        async private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
+            // In order periodically poll all open editors, we need a timer.
+            // In order to have a timer, it needs to spawn its own thread.
+            // In order to be useful, the new thread needs to create new UI objects
+            // In order to create new UI objects, you must be in the main UI thread
+            // In order to do things in the main UI thread from the timer thread, we need a synchonization object.
+            // In order to have a synchronization object, you have to create a Form. 
+
+            // Thus, we create this form we don't want and do our best to hide it, so we can do something completely unrelated. 
+            // That's how microsoft set up how it works, and somehow thought it was good.
+
+            dummyForm = new System.Windows.Forms.Form();
+            dummyForm.Opacity = 0;
+            dummyForm.Show();
+            dummyForm.Visible = false;
+
+            mainThread = SynchronizationContext.Current;
 
             // Store handles to window collections, because otherwise C# stupidty abounds
             _inspectors = Application.Inspectors;
             _explorers = Application.Explorers;
 
-            
+            while (Application.ActiveWindow() == null)
+            {
+                await Task.Delay(1000);
+            }
 
-            // If somehow plugin is loading after windows are already open, find them all and bag 'n tag
-            foreach (Outlook.Inspector inspector in _inspectors) { editorWrapperCollection.Add(inspector, new editorWrapper(inspector)); }
-            foreach (Outlook.Explorer explorer in _explorers) { editorWrapperCollection.Add(explorer, new editorWrapper(explorer)); }
+            editorWrapperCollection.Add(Application.ActiveWindow(), new editorWrapper(Application.ActiveWindow()));
+
+            //// If somehow plugin is loading after windows are already open, find them all and bag 'n tag
+            //foreach (Outlook.Inspector inspector in _inspectors) { editorWrapperCollection.Add(inspector, new editorWrapper(inspector)); }
+            //foreach (Outlook.Explorer explorer in _explorers) { editorWrapperCollection.Add(explorer, new editorWrapper(explorer)); }
 
             // Register new callbacks to catch new editors opening
-            _inspectors.NewInspector += (s) => { editorWrapperCollection.Add(s, new editorWrapper(s)); };
-            _explorers.NewExplorer += (s) => { editorWrapperCollection.Add(s, new editorWrapper(s)); };
+            _inspectors.NewInspector += (s) =>
+            {
+                if (!editorWrapperCollection.ContainsKey(Application.ActiveWindow()))
+                {
+                    editorWrapperCollection.Add(Application.ActiveWindow(), new editorWrapper(Application.ActiveWindow() as object));
+                }
+                Debug.Print("Creating new insp wrapper for object " + s.GetHashCode()); editorWrapperCollection.Add(s, new editorWrapper(s));
+            };
+
+
+            _explorers.NewExplorer += (s) =>
+            {
+                if (!editorWrapperCollection.ContainsKey(Application.ActiveWindow()))
+                {
+                    editorWrapperCollection.Add(Application.ActiveWindow(), new editorWrapper(Application.ActiveWindow() as object));
+                }
+                Debug.Print("Creating new exp wrapper for object " + s.GetHashCode()); editorWrapperCollection.Add(s, new editorWrapper(s));
+            };
 
             ((Outlook.ApplicationEvents_11_Event)Application).Quit += new Outlook.ApplicationEvents_11_QuitEventHandler(ThisAddIn_Shutdown);
         }
@@ -92,7 +134,14 @@ namespace sixSigmaSecureSend
             int numExternal = 0;
             const string PR_SMTP_ADDRESS =
                 "http://schemas.microsoft.com/mapi/proptag/0x39FE001E";
-            Outlook.Recipients recips = mail.Recipients;
+
+            Outlook.Recipients recips = null;
+            Globals.ThisAddIn.mainThread.Send((s) =>
+            {
+                recips = mail.Recipients;
+
+            }, null);
+
             foreach (Outlook.Recipient recip in recips)
             {
                 if (recip.Address != null) // Check for invalid email addresses
@@ -164,7 +213,7 @@ namespace sixSigmaSecureSend
         private bool paneTrigd = false; // Some things we only want to do once after the window opens
 
         private bool delaySet = true; // default to delay on
-        
+
         public editorWrapper(Object Editor)
         {
             // Save associated editor object, right now used for cleaning up callbacks
@@ -181,7 +230,7 @@ namespace sixSigmaSecureSend
                 (Editor as Outlook.Inspector).Application.ItemSend += (object item, ref bool cancel) =>
                 { ThisAddIn.GetMailItem(editor).DeferredDeliveryTime = (delaySet) ? (DateTime.Now).Add(new TimeSpan(0, 0, 30)) : new DateTime(4501, 1, 1); }; // Implement 30 second delay if enabled
 
-                ((Editor as Outlook.Inspector).CurrentItem as Outlook.MailItem).Open += (ref bool s) => { secureOptionsVisible = taskPane.Visible =  false; }; // Prevent ribbon options from blinking when changing drafts
+                ((Editor as Outlook.Inspector).CurrentItem as Outlook.MailItem).Open += (ref bool s) => { secureOptionsVisible = taskPane.Visible = false; }; // Prevent ribbon options from blinking when changing drafts
 
                 ((Outlook.InspectorEvents_10_Event)Editor).Activate += () => { pollTimer.Enabled = true; };
                 ((Outlook.InspectorEvents_10_Event)Editor).Deactivate += () => { pollTimer.Enabled = false; };
@@ -192,7 +241,7 @@ namespace sixSigmaSecureSend
                 (Editor as Outlook.Explorer).Application.ItemSend += (object item, ref bool cancel) =>
                 { ThisAddIn.GetMailItem(editor).DeferredDeliveryTime = (delaySet) ? (DateTime.Now).Add(new TimeSpan(0, 0, 30)) : new DateTime(4501, 1, 1); };
 
-                ((Outlook.ExplorerEvents_10_Event)Editor).InlineResponseClose += () => { secureOptionsVisible = false; };
+                ((Outlook.ExplorerEvents_10_Event)Editor).InlineResponseClose += () => { secureOptionsVisible = taskPane.Visible = false; };
 
                 ((Outlook.ExplorerEvents_10_Event)Editor).Activate += () => { pollTimer.Enabled = true; };
                 ((Outlook.ExplorerEvents_10_Event)Editor).Deactivate += () => { pollTimer.Enabled = false; };
@@ -200,10 +249,14 @@ namespace sixSigmaSecureSend
             }
             else { throw new ArgumentException("Not correct type of editor"); }
 
-            // Setup task pane
-            taskPane = (Globals.ThisAddIn.CustomTaskPanes.Add(new secureSendPane(this), "Secure Email", Editor));
-            taskPane.VisibleChanged += new EventHandler(TaskPane_VisibleChanged);
-            taskPane.Visible = showPane;
+            Globals.ThisAddIn.mainThread.Send((s) =>
+            {
+                // Setup task pane
+                taskPane = (Globals.ThisAddIn.CustomTaskPanes.Add(new secureSendPane(this), "Secure Email", Editor));
+                taskPane.VisibleChanged += new EventHandler(TaskPane_VisibleChanged);
+                taskPane.Visible = showPane;
+            }, null);
+
 
             // Kick-off explicitly
             pollTimer.Enabled = true;
@@ -226,11 +279,16 @@ namespace sixSigmaSecureSend
 
             editor = null;
         }
-        
+
         private void reviewEditor(object sender, EventArgs e)
         {
 
             Debug.Print("timer proce from object: " + GetHashCode());
+            if (Globals.ThisAddIn.Application.ActiveWindow() == null)
+            {
+                return;
+            }
+            Debug.Print("Active window object is " + (Globals.ThisAddIn.Application.ActiveWindow() as object).GetHashCode());
 
             //try
             //{
@@ -238,9 +296,10 @@ namespace sixSigmaSecureSend
 
             Outlook.MailItem emailMsg = ThisAddIn.GetMailItem(editor);
 
-            if (emailMsg is null) {
-
-                Debug.Print("reviewing no mail item...?"); return; }
+            if (emailMsg is null)
+            {
+                Debug.Print("reviewing no mail item...?"); return;
+            }
 
             // Check if heading outside of Raytheon
             if (numExternal != ThisAddIn.externalRecipients(emailMsg))
@@ -477,7 +536,7 @@ namespace sixSigmaSecureSend
         }
 
 
-        internal bool toggleDelay { get => delaySet;  set => delaySet = value; }
+        internal bool toggleDelay { get => delaySet; set => delaySet = value; }
         public bool addInActive { get => msgSetSecure; set => msgSetSecure = value; }
         public bool addInVisible { get => secureOptionsVisible; set => secureOptionsVisible = value; }
         public bool addInPaneVisible { get => showPane; set => showPane = value; }
