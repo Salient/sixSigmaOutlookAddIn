@@ -108,5 +108,10 @@ namespace sixSigmaSecureSend
         {
             myWrapper.updateState(checkBox_addInStatus.Checked);
         }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            this.Visible = false;
+        }
     }
 }

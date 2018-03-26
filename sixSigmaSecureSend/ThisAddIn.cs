@@ -78,37 +78,8 @@ namespace sixSigmaSecureSend
             foreach (Outlook.Explorer explorer in _explorers) { editorWrapperCollection.Add(explorer.GetHashCode(), new editorWrapper(explorer)); }
 
             // Register new callbacks to catch new editors opening
-            _inspectors.NewInspector += (s) =>
-            {
-               // Debug.Print("new insp event fired for " + s.GetHashCode() + ", active window is " + Application.ActiveWindow().getHashCode());
-                //if (!editorWrapperCollection.ContainsKey((Application.ActiveWindow() as object).GetHashCode()))
-                //{
-                    //editorWrapperCollection.Add(Application.ActiveWindow(), new editorWrapper(Application.ActiveWindow() as object));
-
-                    // Debug.Print("Creating new insp wrapper for object " + s.GetHashCode());
-                    editorWrapperCollection.Add(s.GetHashCode(), new editorWrapper(s));
-                //} else
-                //{
-                //    Debug.Print("Adding object twice!!!");
-                //}
-                
-            };
-
-
-            _explorers.NewExplorer += (s) =>
-            {
-                //if (!editorWrapperCollection.ContainsKey(Application.ActiveWindow()))
-                //{
-                    // Debug.Print("Creating new exp wrapper for object " + s.GetHashCode());
-                    editorWrapperCollection.Add(s.GetHashCode(), new editorWrapper(s));
-                    //editorWrapperCollection.Add(Application.ActiveWindow(), new editorWrapper(Application.ActiveWindow() as object));
-                //}
-                //else
-                //{
-                //    Debug.Print("Adding object twice!!!");
-                //}
-
-            };
+            _inspectors.NewInspector += (s) => { editorWrapperCollection.Add(s.GetHashCode(), new editorWrapper(s)); };
+            _explorers.NewExplorer += (s) => { editorWrapperCollection.Add(s.GetHashCode(), new editorWrapper(s)); };
 
             ((Outlook.ApplicationEvents_11_Event)Application).Quit += new Outlook.ApplicationEvents_11_QuitEventHandler(ThisAddIn_Shutdown);
         }
@@ -127,18 +98,9 @@ namespace sixSigmaSecureSend
 
 
         // Some helper functions
-        internal static Outlook.MailItem GetMailItem(Object editor)
-        {
-            if ((editor is Outlook.Inspector) && (editor as Outlook.Inspector).CurrentItem is Outlook.MailItem)
-            {
-                return (editor as Outlook.Inspector).CurrentItem;
-            }
-
-            if (editor is Outlook.Explorer)
-            {
-                return (editor as Outlook.Explorer).ActiveInlineResponse;
-            }
-
+        internal static Outlook.MailItem GetMailItem(Object editor) {
+            if ((editor is Outlook.Inspector) && (editor as Outlook.Inspector).CurrentItem is Outlook.MailItem) { return (editor as Outlook.Inspector).CurrentItem; }
+            if (editor is Outlook.Explorer) { return (editor as Outlook.Explorer).ActiveInlineResponse; }
             return null;
         }
 
@@ -231,25 +193,12 @@ namespace sixSigmaSecureSend
         {
             // Save associated editor object, right now used for cleaning up callbacks
             editor = Editor;
-
+            
             // Create a poll timer for this instance
             pollTimer = new Timer(1000); // Check every second (only enabled when window has focus)
             pollTimer.AutoReset = true;
             pollTimer.Elapsed += reviewEditor;
-
-            //Debug.Print("-----");
-            //Debug.Print("Creating new wrapper for object " + editor.GetHashCode());
-            //Debug.Print("Active is " + (Globals.ThisAddIn.Application.ActiveWindow() as object).GetHashCode() + ", existing keys are");
-            //foreach (object thing in Globals.ThisAddIn.editorWrapperCollection.Keys) {
-            //    Debug.Print(thing.GetHashCode().ToString());
-            //        }
-            //Debug.Print("xxxxx");
-            //if (Globals.ThisAddIn.editorWrapperCollection.ContainsKey(editor.GetHashCode()))
-            //{
-            //    Debug.Print("oh....kay?");
-            //    throw new InvalidOperationException();
-            //}
-
+            
             //Register Callbacks
             if (Editor is Outlook.Inspector && (Editor as Outlook.Inspector).CurrentItem is Outlook.MailItem)
             {
@@ -552,32 +501,8 @@ namespace sixSigmaSecureSend
         internal secureSendPane getSecureSendPane { get => taskPane.Control as secureSendPane; }
         void TaskPane_VisibleChanged(object sender, EventArgs e) { showPane = taskPane.Visible; secureSendRibbon.Ribbon?.InvalidateControl("toggleButton1"); }
 
-        internal static editorWrapper getWrapper(Office.IRibbonControl control)
-        {
-            Debug.Print("*** Getting wrapper");
-            Debug.Print("active inspector: " + Globals.ThisAddIn.Application.ActiveInspector()?.GetHashCode());
-            Debug.Print("active explorer: " + Globals.ThisAddIn.Application.ActiveExplorer()?.GetHashCode());
-            Debug.Print("active window: " + (Globals.ThisAddIn.Application.ActiveWindow() as object).GetHashCode());
-            Debug.Print("Control context: " + (control.Context as object).GetHashCode());
-            Debug.Print("--- ");
-            foreach (Outlook.Inspector inspector in Globals.ThisAddIn.Application.Inspectors) { Debug.Print("Inspectors object hash: " + inspector.GetHashCode()); }
-            foreach (Outlook.Explorer explorer in Globals.ThisAddIn.Application.Explorers) { Debug.Print("Explorers object hash: " + explorer.GetHashCode()); }
-
-
-
-            Debug.Print("*** ");
-
-            //if (Globals.ThisAddIn.editorWrapperCollection.ContainsKey(control.Context))
-            foreach (editorWrapper item in Globals.ThisAddIn.editorWrapperCollection.Values)
-            {
-                if (item.editor == control.Context)
-            
-                return item;
-            }
-            return null;
-        }
-
-
+        internal static editorWrapper getWrapper(Office.IRibbonControl control) { foreach (editorWrapper item in Globals.ThisAddIn.editorWrapperCollection.Values) { if (item.editor == control.Context) return item; } return null; }
+        
         internal bool toggleDelay { get => delaySet; set => delaySet = value; }
         public bool addInActive { get => msgSetSecure; set => msgSetSecure = value; }
         public bool addInVisible { get => secureOptionsVisible; set => secureOptionsVisible = value; }
