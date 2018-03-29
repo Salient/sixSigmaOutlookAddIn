@@ -41,7 +41,10 @@ namespace sixSigmaSecureSend
         //private System.Windows.Forms.Form dummyForm = null;
 
         // Need a place to store state information for each editor.
-        internal Dictionary<int, editorWrapper> editorWrapperCollection = new Dictionary<int, editorWrapper>();
+        private Dictionary<int, editorWrapper> editorWrapperCollection = new Dictionary<int, editorWrapper>();
+
+        private string secureTempPath = @"%localappdata%\Temporary Internet Files\Content.Outlook\SSSS";
+        private DirectoryInfo secureFolder;
 
         // Required to create custom ribbon
         protected override Microsoft.Office.Core.IRibbonExtensibility CreateRibbonExtensibilityObject() { return new secureSendRibbon(); }
@@ -75,7 +78,7 @@ namespace sixSigmaSecureSend
             //}
 
             //editorWrapperCollection.Add(Application.ActiveWindow(), new editorWrapper(Application.ActiveWindow()));
-            
+
             //// If somehow plugin is loading after windows are already open, find them all and bag 'n tag
             foreach (Outlook.Inspector inspector in _inspectors) { newInspector(inspector); }
             foreach (Outlook.Explorer explorer in _explorers) { newExplorer(explorer); }
@@ -85,6 +88,14 @@ namespace sixSigmaSecureSend
             _explorers.NewExplorer += (s) => { newExplorer(s); };
 
             ((Outlook.ApplicationEvents_11_Event)Application).Quit += new Outlook.ApplicationEvents_11_QuitEventHandler(ThisAddIn_Shutdown);
+
+            // Clean/setup secure temporary attachments folder.
+            if (Directory.Exists(secureTempPath))
+            {
+                Directory.Delete(secureTempPath + "/*", true);
+                secureFolder = new DirectoryInfo(secureTempPath);
+            }
+            else { secureFolder = Directory.CreateDirectory(secureTempPath); }
         }
 
         private void ThisAddIn_Shutdown()
@@ -131,9 +142,10 @@ namespace sixSigmaSecureSend
 
         private void newExplorer(Outlook.Explorer explorer)
         {
-            
+
             // Register inline response events
-            explorer.InlineResponse += (s) => {
+            explorer.InlineResponse += (s) =>
+            {
                 // Check to see what kind of inline it is. Not sure how many there are.
                 if (!(s is Outlook.MailItem)) { Debug.Print("Vat da faaack"); return; }
 
@@ -151,7 +163,7 @@ namespace sixSigmaSecureSend
                 ((Outlook.ExplorerEvents_10_Event)explorer).Activate += newWrapper.runTimer;
                 explorer.Deactivate += newWrapper.pauseTimer;
                 // ((Outlook.ExplorerEvents_10_Event)explorer).Close += () => { editorWrapperCollection.Remove(explorer.GetHashCode()); };
-                
+
                 // Register mail item callbacks
                 mailItem.Open += (ref bool b) => { newWrapper.addInVisible = newWrapper.getTaskPane.Visible = false; }; // Prevent ribbon options from blinking when changing drafts
                 mailItem.AttachmentAdd += newWrapper.checkClassification;
@@ -159,26 +171,29 @@ namespace sixSigmaSecureSend
 
                 // That's a wrap
                 editorWrapperCollection.Add(explorer.GetHashCode(), newWrapper);
+                // Don't wait the whole second for first poll
+                newWrapper.reviewEditor(null);
             };
 
-            //TODO maybe inline close here?
-            explorer.InlineResponseClose += () => {
+            explorer.InlineResponseClose += () =>
+            {
                 editorWrapper thisWrapper = editorWrapperCollection[Application.ActiveExplorer().GetHashCode()];
 
                 ((Outlook.ExplorerEvents_10_Event)explorer).Activate -= thisWrapper.runTimer;
                 explorer.Deactivate -= thisWrapper.pauseTimer;
-                
+
                 thisWrapper.deconstructWrapper();
-                editorWrapperCollection.Remove(Application.ActiveExplorer().GetHashCode()); };
+                editorWrapperCollection.Remove(Application.ActiveExplorer().GetHashCode());
+            };
         }
 
         // Some helper functions
-        internal static Outlook.MailItem GetMailItem(Object editor)
-        {
-            if ((editor is Outlook.Inspector) && (editor as Outlook.Inspector).CurrentItem is Outlook.MailItem) { return (editor as Outlook.Inspector).CurrentItem; }
-            if (editor is Outlook.Explorer) { return (editor as Outlook.Explorer).ActiveInlineResponse; }
-            return null;
-        }
+        //internal static Outlook.MailItem GetMailItem(Object editor)
+        //{
+        //    if ((editor is Outlook.Inspector) && (editor as Outlook.Inspector).CurrentItem is Outlook.MailItem) { return (editor as Outlook.Inspector).CurrentItem; }
+        //    if (editor is Outlook.Explorer) { return (editor as Outlook.Explorer).ActiveInlineResponse; }
+        //    return null;
+        //}
 
         #region VSTO generated code
 
@@ -199,20 +214,168 @@ namespace sixSigmaSecureSend
 
     internal class helperFunctions
     {
-        //internal static string ReadDocumentProperty(Office.DocumentProperties attachment, string propertyName)
-        //{
-        //    Office.DocumentProperties properties;
-        //    properties = attachment.CustomDocumentProperties;
+        internal class attachmentInfo
+        {
+            Dictionary<string, string> metaInfo;
+            string securePath;
+            classificationData classification;
+            attachmentInfo(Dictionary<string, string> newinfo)
+            {
+                metaInfo = newinfo;
+                if (newinfo.ContainsKey("Path")) { securePath = newinfo["Path"]; }
+                // TODO 
+                // scan all tags for classification data. assign blank or invalid object
+            }
 
-        //    foreach (Office.DocumentProperty prop in properties)
-        //    {
-        //        if (prop.Name == propertyName)
-        //        {
-        //            return prop.Value.ToString();
-        //        }
-        //    }
-        //    return null;
-        //}
+            internal class classificationData
+            {
+                Dictionary<string, string> controlCodes;
+                bool validClassification;
+                bool emptyClassification;
+
+                classificationData()
+                {
+                    classificationData temp = new classificationData(true);
+                    controlCodes = temp.controlCodes;
+                    validClassification = temp.validClassification;
+                    emptyClassification = temp.emptyClassification;
+                }
+
+                classificationData(bool empty)
+                {
+                    if (empty)
+                    {
+                        controlCodes = new Dictionary<string, string>();
+                        validClassification = false;
+                        emptyClassification = true;
+                    }
+                    else
+                    {
+                        controlCodes = new Dictionary<string, string> { // default to unrestricted/undetermined
+                        {"rtnipcontrolcode", "unrestricted"},
+                        {"rtnipcontrolcodevm", "noipvm"},
+                        {"rtnexportcontrolcountry", "usa"},
+                        {"rtnexportcontrolcode", "undetermined"},
+                        {"rtnexportcontrolcodevm", "piogcgtc5004"}
+                    };
+
+                        validClassification = true;
+                        emptyClassification = false;
+                    }
+                }
+
+
+                classificationData(string data)
+                {
+                    classificationData temp = parseClassification(data);
+                    
+                    controlCodes = temp.controlCodes;
+                    validClassification = temp.validClassification;
+                    emptyClassification = temp.emptyClassification;
+                }
+
+                private static classificationData parseClassification(string classification) // String manipulation stuff
+                { // Far as I can tell, the classification tool sets up to five keywords, always ordered in the same way, seperated by |
+
+                    if (classification == "") { return new classificationData(); }
+
+                    // Sanitize input
+                    classification = classification.Trim();
+                    classification = classification.Replace("[", "");
+                    classification = classification.Replace("]", "");
+                    string[] keywords = classification.Split('|');
+                    if (keywords.Length != 5)
+                    {
+                        Debug.Print("Invalid classification string found?");
+                        return new classificationData();
+                    } // Replace invalid classification with default
+
+                    classificationData tempObject = new classificationData(false); // Prepopulated, valid classification object
+                    for (int x = 0; x < 5; x++)
+                    {
+                        string code = keywords[x];
+                        if (code == "") { continue; }
+                        string[] codeparts = code.Split(':');
+                        if (codeparts.Length != 2) { continue; }
+                        if (tempObject.controlCodes.ContainsKey(codeparts[0])) { tempObject.controlCodes[codeparts[0]] = codeparts[1]; }
+                        else { Debug.Print("invalid control code key: " + codeparts[0] + " with value " + codeparts[1] + ", skipping"); }
+                    }
+
+                    tempObject.validate();
+                    return tempObject;
+                }
+
+                private void validate() // Verify each field matches one of the possible values
+                {
+                    validClassification = false; // Default to invalid
+                    emptyClassification = true;
+
+                    if (!(controlCodes.Count == 5
+                        && controlCodes.ContainsKey("rtnipcontrolcode")
+                        && controlCodes.ContainsKey("rtnipcontrolcodevm")
+                        && controlCodes.ContainsKey("rtnexportcontrolcountry")
+                        && controlCodes.ContainsKey("rtnexportcontrolcode")
+                        && controlCodes.ContainsKey("rtnexportcontrolcodevm"))) { return; } // Must contain exactly these keys, no more, no less
+
+                    emptyClassification = false; 
+
+                    // Validate proper values for each property
+
+                    switch(controlCodes["rtnipcontrolcode"])
+                    {
+                        case "internaluseonly":
+                        case "mostprivate":
+                        case "competitionsensitive":
+                        case "proprietary":
+                        case "thirdpartyproprietary":
+                        case "public":
+                        case "unrestricted":
+                            break;
+                        default: return;
+                    }
+
+                    switch (controlCodes["rtnipcontrolcodevm"])
+                    {
+                        case "preexistingipvm":
+                        case "rpogc035":
+                        case "noipvm":
+                            break;
+                        default: return;
+                    }
+                    switch (controlCodes["rtnexportcontrolcountry"])
+                    {
+                        case "usa":
+                            break;
+                        default: return;
+                    }
+                    switch (controlCodes["rtnexportcontrolcode"])
+                    {
+                        case "otherinfo":
+                        case "nonexporteximdetermined":
+                        case "itar":
+                        case "ear":
+                        case "undetermined":
+                        case "legacy":
+                            break;
+                        default: return;
+                    }
+                    switch (controlCodes["rtnexportcontrolcodevm"])
+                    {
+                        case "piogcgtc5004":
+                        case "nousecvm":
+                        case "dodi523024":
+                        case "preexistingusecvm":
+                            break;
+                        default: return;
+                    }
+
+                    validClassification = true;
+                }
+
+            }
+        }
+
+
         // Getting all the available Information of a File into a Arraylist
         internal static ArrayList GetDetailedFileInfo(string sFile)
         {
@@ -231,28 +394,38 @@ namespace sixSigmaSecureSend
                     Folder dir = sh.NameSpace(Path.GetDirectoryName(sFile));
                     // Creating a new FolderItem from Folder that includes the File
                     FolderItem item = dir.ParseName(Path.GetFileName(sFile));
-                    // loop throw the Folder Items
-                    for (int i = 0; i < 30; i++)
+
+                    // Debug
+                    Debug.Print("Dumping metadata of " + sFile);
+                    for (int x = 0; x < int.MaxValue; x++)
                     {
-                        // read the current detail Info from the FolderItem Object
-                        //(Retrieves details about an item in a folder. 
-                        //For example, its size, type, or the time 
-                        //of its last modification.)
+                        string tag = dir.GetDetailsOf(null, x);
+                        if (tag is "") { break; }
+                        Debug.Print("(" + x + ") [" + tag + "] " + dir.GetDetailsOf(item, x));
 
-                        // some examples:
-                        // 0 Retrieves the name of the item. 
-                        // 1 Retrieves the size of the item.
-                        // 2 Retrieves the type of the item.
-                        // 3 Retrieves the date and time that the item was last modified.
-                        // 4 Retrieves the attributes of the item.
-                        // -1 Retrieves the info tip information for the item. 
-
-                        string det = dir.GetDetailsOf(item, i);
-                        // Create a helper Object for holding the current Information
-                        // an put it into a ArrayList
-                        DetailedFileInfo oFileInfo = new DetailedFileInfo(i, det);
-                        aReturn.Add(oFileInfo);
                     }
+                    // loop throw the Folder Items
+                    //for (int i = 0; i < 30; i++)
+                    //{
+                    //    // read the current detail Info from the FolderItem Object
+                    //    //(Retrieves details about an item in a folder. 
+                    //    //For example, its size, type, or the time 
+                    //    //of its last modification.)
+
+                    //    // some examples:
+                    //    // 0 Retrieves the name of the item. 
+                    //    // 1 Retrieves the size of the item.
+                    //    // 2 Retrieves the type of the item.
+                    //    // 3 Retrieves the date and time that the item was last modified.
+                    //    // 4 Retrieves the attributes of the item.
+                    //    // -1 Retrieves the info tip information for the item. 
+
+                    //    string det = dir.GetDetailsOf(item, i);
+                    //    // Create a helper Object for holding the current Information
+                    //    // an put it into a ArrayList
+                    //    DetailedFileInfo oFileInfo = new DetailedFileInfo(i, det);
+                    //    aReturn.Add(oFileInfo);
+                    //}
 
                 }
                 catch (Exception)
@@ -261,6 +434,37 @@ namespace sixSigmaSecureSend
                 }
             }
             return aReturn;
+        }
+
+        internal static attachmentInfo getAttachmentInfo(string sFile)
+        {
+            if (sFile is null) { throw new ArgumentNullException("File path"); }
+
+            if (sFile.Length > 0)
+            {
+                Dictionary<string, string> fileMetaData = new Dictionary<string, string>();
+
+                try
+                {
+                    // Creating a ShellClass Object from the Shell32
+                    Shell32.Shell sh = new Shell();
+                    // Creating a Folder Object from Folder that inculdes the File
+                    Folder dir = sh.NameSpace(Path.GetDirectoryName(sFile));
+                    // Creating a new FolderItem from Folder that includes the File
+                    FolderItem item = dir.ParseName(Path.GetFileName(sFile));
+
+                    for (int x = 0; x < int.MaxValue; x++)
+                    {
+                        if (dir.GetDetailsOf(null, x) is "") { break; }
+                        else { fileMetaData.Add(dir.GetDetailsOf(null, x), dir.GetDetailsOf(item, x)); }
+                    }
+                }
+                catch (Exception)
+                {
+
+                }
+
+            }
         }
 
 
@@ -321,7 +525,7 @@ namespace sixSigmaSecureSend
 
         public editorWrapper(Outlook.MailItem mItem)
         {
-            // Save associated editor object, right now used for cleaning up callbacks
+            // Store instance of email being composed
             mailItem = mItem;
 
             // Create a poll timer for this instance
@@ -330,7 +534,7 @@ namespace sixSigmaSecureSend
             pollTimer.Elapsed += reviewEditor;
 
             attachmentClassified = new Dictionary<string, bool>();
-        
+
             //Globals.ThisAddIn.mainThread.Send((s) =>
             //{
             // Setup task pane
@@ -338,9 +542,10 @@ namespace sixSigmaSecureSend
             taskPane.VisibleChanged += new EventHandler(TaskPane_VisibleChanged);
             taskPane.Visible = showPane;
             //}, null);
-            
+
             // Kick-off explicitly
-            pollTimer.Enabled = true;
+            // pollTimer.Enabled = true;
+
         }
 
 
@@ -376,15 +581,15 @@ namespace sixSigmaSecureSend
 
             ArrayList results = helperFunctions.GetDetailedFileInfo(attachPath);
 
-            Shell shell = new Shell32.Shell();
-            Folder attachmentFolder = shell.NameSpace(Path.GetDirectoryName(attachPath));
-            FolderItem file = attachmentFolder.ParseName(Path.GetFileName(attachPath));
+            //Shell shell = new Shell32.Shell();
+            //Folder attachmentFolder = shell.NameSpace(Path.GetDirectoryName(attachPath));
+            //FolderItem file = attachmentFolder.ParseName(Path.GetFileName(attachPath));
 
-            for (int i = 0; i < 30; i++)
-            {
-                string det = attachmentFolder.GetDetailsOf(file, i);
+            //for (int i = 0; i < 30; i++)
+            //{
+            //    string det = attachmentFolder.GetDetailsOf(file, i);
 
-            }
+            //}
 
         }
         //for (int i = 0; i < short.MaxValue; i++)
@@ -441,32 +646,32 @@ namespace sixSigmaSecureSend
 
 
 
-I looked into the shellfile class a little more. The answer was staring me right in the face.
-string[] keywords = new string[x];
-var shellFile = ShellFile.FromFilePath(file);
-shellFile.Properties.System.Keywords.Value = keywords;
+    I looked into the shellfile class a little more. The answer was staring me right in the face.
+    string[] keywords = new string[x];
+    var shellFile = ShellFile.FromFilePath(file);
+    shellFile.Properties.System.Keywords.Value = keywords;
 
 
-to get the keywords already added to the file use:
-var tags = (string[])shellFile.Properties.System.Keywords.ValueAsObject;
-tags = tags ?? new string[0];
+    to get the keywords already added to the file use:
+    var tags = (string[])shellFile.Properties.System.Keywords.ValueAsObject;
+    tags = tags ?? new string[0];
 
-if (tags.Length != 0)
-{
-foreach (string str in tags)
-{
-// code here
-}
-}
+    if (tags.Length != 0)
+    {
+    foreach (string str in tags)
+    {
+    // code here
+    }
+    }
 
 
-and done!
-*/
+    and done!
+    */
 
 
         private void countExternalRecipients(object emailMsg)
         {
-           
+
         }
 
         //    private void reviewAttachments(object msgObj)
@@ -566,36 +771,13 @@ and done!
         //                attach.Type;
 
 
-
-
-        //I looked into the shellfile class a little more. The answer was staring me right in the face.
-        //string[] keywords = new string[x];
-        //var shellFile = ShellFile.FromFilePath(file);
-        //shellFile.Properties.System.Keywords.Value = keywords;
-
-
-        //to get the keywords already added to the file use:
-        //var tags = (string[])shellFile.Properties.System.Keywords.ValueAsObject;
-        //tags = tags ?? new string[0];
-
-        //if (tags.Length != 0)
-        //{
-        //    foreach (string str in tags)
-        //    {
-        //        // code here
-        //    }
-        //}
-
-
-        //and done!
-        //*/
-        //            }
-        //        }
-        //    }
         private void reviewEditor(object unused, EventArgs ev) { reviewEditor(unused); } // Need overload for timer event handler
-        private void reviewEditor(object unused)
+        internal void reviewEditor(object unused)
         {
             if (Globals.ThisAddIn.Application.ActiveWindow() == null) { return; } // Bail if Outlook is still initializing and there is no active window yet
+
+            // Stop from proc'ing over itself. Turned back on at end of poll.
+            pollTimer.Enabled = false;
 
             if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
             {
@@ -606,7 +788,7 @@ and done!
                 return;
             }
 
-            
+
             //Debug.Print("timer proce from object: " + GetHashCode());
             //Debug.Print("Active window object is " + (Globals.ThisAddIn.Application.ActiveWindow() as object).GetHashCode());
 
@@ -615,7 +797,7 @@ and done!
             bool statusChange = false;
 
             if (mailItem is null) { /*Debug.Print("reviewing no mail item...?");*/ return; } // Not editing a new email
-            
+
             // Check if heading outside of Raytheon
             int count = 0;
             const string PR_SMTP_ADDRESS =
@@ -655,7 +837,7 @@ and done!
             }
 
             if (count != numExternal) { statusChange = true; numExternal = count; }
-            
+
             // If we are heading outside of Raytheon, are we showing some security options?
             if (addInVisible != (numExternal > 0))
             {
@@ -705,6 +887,7 @@ and done!
             //    // Do nothing, timer proc'd while window(s) were closing
             //    // Just being a good digital citizen by catching it here
             //}
+            pollTimer.Enabled = true;
         }
 
 
