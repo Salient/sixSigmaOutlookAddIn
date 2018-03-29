@@ -75,14 +75,14 @@ namespace sixSigmaSecureSend
             //}
 
             //editorWrapperCollection.Add(Application.ActiveWindow(), new editorWrapper(Application.ActiveWindow()));
-
+            
             //// If somehow plugin is loading after windows are already open, find them all and bag 'n tag
-            foreach (Outlook.Inspector inspector in _inspectors) { editorWrapperCollection.Add(inspector.GetHashCode(), new editorWrapper(inspector)); }
-            foreach (Outlook.Explorer explorer in _explorers) { editorWrapperCollection.Add(explorer.GetHashCode(), new editorWrapper(explorer)); }
+            foreach (Outlook.Inspector inspector in _inspectors) { newInspector(inspector); }
+            foreach (Outlook.Explorer explorer in _explorers) { newExplorer(explorer); }
 
             // Register new callbacks to catch new editors opening
-            _inspectors.NewInspector += (s) => { editorWrapperCollection.Add(s.GetHashCode(), new editorWrapper(s)); };
-            _explorers.NewExplorer += (s) => { editorWrapperCollection.Add(s.GetHashCode(), new editorWrapper(s)); };
+            _inspectors.NewInspector += (s) => { newInspector(s); };
+            _explorers.NewExplorer += (s) => { newExplorer(s); };
 
             ((Outlook.ApplicationEvents_11_Event)Application).Quit += new Outlook.ApplicationEvents_11_QuitEventHandler(ThisAddIn_Shutdown);
         }
@@ -99,6 +99,78 @@ namespace sixSigmaSecureSend
         // Overload to satisfy Designer assumptions
         private void ThisAddIn_Shutdown(Object sender, EventArgs e) { }
 
+        private void newInspector(Outlook.Inspector inspector)
+        {
+            if (inspector.CurrentItem is Outlook.MailItem)
+            {
+                // Cast and create wrapper
+                Outlook.MailItem mailItem = inspector.CurrentItem;
+                editorWrapper newWrapper = new editorWrapper(mailItem);
+
+                // Wrapper created, register Application level callbacks
+                inspector.Application.ItemSend += (object item, ref bool cancel) =>
+                {
+                    inspector.CurrentItem.DeferredDeliveryTime = // Implement 30 second delay if enabled
+                        (newWrapper.toggleDelay) ? (DateTime.Now).Add(new TimeSpan(0, 0, 30)) : new DateTime(4501, 1, 1);
+                };
+
+                // Register Window level callbacks
+                ((Outlook.InspectorEvents_10_Event)inspector).Activate += newWrapper.runTimer;
+                inspector.Deactivate += newWrapper.pauseTimer;
+                ((Outlook.InspectorEvents_10_Event)inspector).Close += () => { editorWrapperCollection.Remove(inspector.GetHashCode()); };
+
+                // Register mail item callbacks
+                mailItem.Open += (ref bool s) => { newWrapper.addInVisible = newWrapper.getTaskPane.Visible = false; }; // Prevent ribbon options from blinking when changing drafts
+                mailItem.AttachmentAdd += newWrapper.checkClassification;
+                mailItem.Unload += newWrapper.deconstructWrapper;
+
+                // That's a wrap
+                editorWrapperCollection.Add(inspector.GetHashCode(), newWrapper);
+            }
+        }
+
+        private void newExplorer(Outlook.Explorer explorer)
+        {
+            
+            // Register inline response events
+            explorer.InlineResponse += (s) => {
+                // Check to see what kind of inline it is. Not sure how many there are.
+                if (!(s is Outlook.MailItem)) { Debug.Print("Vat da faaack"); return; }
+
+                Outlook.MailItem mailItem = s as Outlook.MailItem;
+                editorWrapper newWrapper = new editorWrapper(mailItem);
+
+                // Wrapper created, register Application level callbacks
+                explorer.Application.ItemSend += (object item, ref bool cancel) =>
+                {
+                    explorer.ActiveInlineResponse.DeferredDeliveryTime = // Implement 30 second delay if enabled
+                        (newWrapper.toggleDelay) ? (DateTime.Now).Add(new TimeSpan(0, 0, 30)) : new DateTime(4501, 1, 1);
+                };
+
+                // Register Window level callbacks
+                ((Outlook.ExplorerEvents_10_Event)explorer).Activate += newWrapper.runTimer;
+                explorer.Deactivate += newWrapper.pauseTimer;
+                // ((Outlook.ExplorerEvents_10_Event)explorer).Close += () => { editorWrapperCollection.Remove(explorer.GetHashCode()); };
+                
+                // Register mail item callbacks
+                mailItem.Open += (ref bool b) => { newWrapper.addInVisible = newWrapper.getTaskPane.Visible = false; }; // Prevent ribbon options from blinking when changing drafts
+                mailItem.AttachmentAdd += newWrapper.checkClassification;
+                // mailItem.Unload += newWrapper.deconstructWrapper;
+
+                // That's a wrap
+                editorWrapperCollection.Add(explorer.GetHashCode(), newWrapper);
+            };
+
+            //TODO maybe inline close here?
+            explorer.InlineResponseClose += () => {
+                editorWrapper thisWrapper = editorWrapperCollection[Application.ActiveExplorer().GetHashCode()];
+
+                ((Outlook.ExplorerEvents_10_Event)explorer).Activate -= thisWrapper.runTimer;
+                explorer.Deactivate -= thisWrapper.pauseTimer;
+                
+                thisWrapper.deconstructWrapper();
+                editorWrapperCollection.Remove(Application.ActiveExplorer().GetHashCode()); };
+        }
 
         // Some helper functions
         internal static Outlook.MailItem GetMailItem(Object editor)
@@ -223,7 +295,7 @@ namespace sixSigmaSecureSend
     public class editorWrapper
     {
         // Use email composer as key 
-        private Object editor;
+        private Outlook.MailItem mailItem;
 
         // Custom task pane objects are instanced per email editor; ribbons are single global instance but affect each editor individually. Go figure.
         // Hold reference to task pane object for this instance.
@@ -247,10 +319,10 @@ namespace sixSigmaSecureSend
 
         private Dictionary<string, bool> attachmentClassified;
 
-        public editorWrapper(Object Editor)
+        public editorWrapper(Outlook.MailItem mItem)
         {
             // Save associated editor object, right now used for cleaning up callbacks
-            editor = Editor;
+            mailItem = mItem;
 
             // Create a poll timer for this instance
             pollTimer = new Timer(1000); // Check every second (only enabled when window has focus)
@@ -258,82 +330,32 @@ namespace sixSigmaSecureSend
             pollTimer.Elapsed += reviewEditor;
 
             attachmentClassified = new Dictionary<string, bool>();
-
-            //Register Callbacks
-            if (Editor is Outlook.Inspector && (Editor as Outlook.Inspector).CurrentItem is Outlook.MailItem)
-            {
-                (Editor as Outlook.Inspector).Application.ItemSend += (object item, ref bool cancel) =>
-                { ThisAddIn.GetMailItem(editor).DeferredDeliveryTime = (delaySet) ? (DateTime.Now).Add(new TimeSpan(0, 0, 30)) : new DateTime(4501, 1, 1); }; // Implement 30 second delay if enabled
-
-                ((Editor as Outlook.Inspector).CurrentItem as Outlook.MailItem).Open += (ref bool s) => {
-                    secureOptionsVisible = taskPane.Visible = false; // Prevent ribbon options from blinking when changing drafts
-                    Outlook.Inspector newWindow = Globals.ThisAddIn.Application.ActiveInspector();
-                    if (newWindow.CurrentItem is Outlook.MailItem) { (newWindow.CurrentItem as Outlook.MailItem).AttachmentAdd += checkClassification; }
-                };
-
-                ((Outlook.InspectorEvents_10_Event)Editor).Activate += () => { pollTimer.Enabled = true; };
-                ((Outlook.InspectorEvents_10_Event)Editor).Deactivate += () => { pollTimer.Enabled = false; };
-                ((Outlook.InspectorEvents_10_Event)Editor).Close += deconstructWrapper;
-            }
-            else if (Editor is Outlook.Explorer)
-            {
-                (Editor as Outlook.Explorer).Application.ItemSend += (object item, ref bool cancel) =>
-                { ThisAddIn.GetMailItem(editor).DeferredDeliveryTime = (delaySet) ? (DateTime.Now).Add(new TimeSpan(0, 0, 30)) : new DateTime(4501, 1, 1); };
-
-                //((Editor as Outlook.Explorer).ActiveInlineResponse as Outlook.MailItem).Open += (ref bool s) => {
-                //    Debug.Print("active open");
-                //    secureOptionsVisible = taskPane.Visible = false; // Prevent ribbon options from blinking when changing drafts                
-                //};
-                
-                ((Outlook.ExplorerEvents_10_Event)Editor).InlineResponseClose += () => { secureOptionsVisible = taskPane.Visible = false; };
-                ((Outlook.ExplorerEvents_10_Event)Editor).InlineResponse += (s) => { secureOptionsVisible = taskPane.Visible = false;
-                    Debug.Print("inline open");
-                    // Register specific mail item events
-                    // Catch attachment add, because it's the only time to access the actual temporary file location
-                    if (s is Outlook.MailItem) { (s as Outlook.MailItem).AttachmentAdd += checkClassification; }
-                };
-                ((Outlook.ExplorerEvents_10_Event)Editor).Activate += () => { pollTimer.Enabled = true; };
-                ((Outlook.ExplorerEvents_10_Event)Editor).Deactivate += () => { pollTimer.Enabled = false; };
-                ((Outlook.ExplorerEvents_10_Event)Editor).Close += deconstructWrapper;
-            }
-            else { throw new ArgumentException("Not correct type of editor"); }
-
-            
-            
-            
-
+        
             //Globals.ThisAddIn.mainThread.Send((s) =>
             //{
             // Setup task pane
-            taskPane = (Globals.ThisAddIn.CustomTaskPanes.Add(new secureSendPane(this), "Secure Email", Editor));
+            taskPane = (Globals.ThisAddIn.CustomTaskPanes.Add(new secureSendPane(this), "Secure Email", mItem.Application.ActiveWindow()));
             taskPane.VisibleChanged += new EventHandler(TaskPane_VisibleChanged);
             taskPane.Visible = showPane;
             //}, null);
-
-
+            
             // Kick-off explicitly
             pollTimer.Enabled = true;
         }
 
 
         // Clean up after ourselves when an editor closes
-        void deconstructWrapper()
+        internal void deconstructWrapper()
         {
             pollTimer.Enabled = false;
             pollTimer.Dispose();
 
             if (taskPane != null) { Globals.ThisAddIn.CustomTaskPanes.Remove(taskPane); taskPane = null; }
 
-            // TODO - maybe we care about removing the activate/deactivate event callbacks, maybe we don't?
-            if (editor is Outlook.Inspector) { ((Outlook.InspectorEvents_Event)editor).Close -= deconstructWrapper; }
-            else if (editor is Outlook.Explorer) { ((Outlook.ExplorerEvents_Event)editor).Close -= deconstructWrapper; }
-
-            if (Globals.ThisAddIn.editorWrapperCollection.ContainsKey(editor.GetHashCode())) { Globals.ThisAddIn.editorWrapperCollection.Remove(editor.GetHashCode()); }
-
-            editor = null;
+            mailItem = null;
         }
 
-        private void checkClassification(object sender)
+        internal void checkClassification(object sender)
         {
             //if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
             //{
@@ -347,12 +369,8 @@ namespace sixSigmaSecureSend
 
             Outlook.Attachment attach = sender as Outlook.Attachment;
 
-            string filename = attach.FileName;
-            string attachPath = attach.PathName;
-            string attachGetPath = attach.GetTemporaryFilePath();
+            string attachPath = attach.GetTemporaryFilePath();
             Debug.Print(attach.Type.ToString());
-
-            if (filename == "" || attachPath is null) { return; }
 
             List<string> arrHeaders = new List<string>();
 
@@ -448,54 +466,7 @@ and done!
 
         private void countExternalRecipients(object emailMsg)
         {
-            if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
-            {
-                Thread staThread = new Thread(new ParameterizedThreadStart(countExternalRecipients));
-                staThread.SetApartmentState(ApartmentState.STA);
-                staThread.Start(emailMsg);
-                staThread.Join();
-                return;
-            }
-
-            Outlook.MailItem mail = emailMsg as Outlook.MailItem;
-
-            int count = 0;
-            const string PR_SMTP_ADDRESS =
-                "http://schemas.microsoft.com/mapi/proptag/0x39FE001E";
-
-            Outlook.Recipients recips = null;
-            //Globals.ThisAddIn.mainThread.Send((s) =>
-            //{
-            recips = mail.Recipients;
-
-            //}, null);
-
-            foreach (Outlook.Recipient recip in recips)
-            {
-                if (recip.Address != null) // Check for invalid email addresses
-                {
-                    Outlook.PropertyAccessor pa = recip.PropertyAccessor;
-
-                    try
-                    {
-                        string smtpAddress =
-                            pa.GetProperty(PR_SMTP_ADDRESS).ToString();
-                        if (!smtpAddress.EndsWith("@raytheon.com"))
-                        {
-                            count++;
-                        }
-                    }
-                    catch (System.Runtime.InteropServices.COMException e)
-                    {
-                        Debug.Print("oh no....it's happenning again....");
-                    }
-                    catch (Exception e)
-                    {
-                        throw e;
-                    }
-                }
-            }
-            numExternal = count;
+           
         }
 
         //    private void reviewAttachments(object msgObj)
@@ -621,13 +592,21 @@ and done!
         //            }
         //        }
         //    }
-
-        private void reviewEditor(object unused, EventArgs e) // Need overload for timer event handlers
+        private void reviewEditor(object unused, EventArgs ev) { reviewEditor(unused); } // Need overload for timer event handler
+        private void reviewEditor(object unused)
         {
-
             if (Globals.ThisAddIn.Application.ActiveWindow() == null) { return; } // Bail if Outlook is still initializing and there is no active window yet
 
+            if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
+            {
+                Thread staThread = new Thread(new ParameterizedThreadStart(reviewEditor));
+                staThread.SetApartmentState(ApartmentState.STA);
+                staThread.Start(unused);
+                staThread.Join();
+                return;
+            }
 
+            
             //Debug.Print("timer proce from object: " + GetHashCode());
             //Debug.Print("Active window object is " + (Globals.ThisAddIn.Application.ActiveWindow() as object).GetHashCode());
 
@@ -635,16 +614,48 @@ and done!
             //{
             bool statusChange = false;
 
-            Outlook.MailItem emailMsg = ThisAddIn.GetMailItem(editor);
-
-            if (emailMsg is null) { /*Debug.Print("reviewing no mail item...?");*/ return; } // Not editing a new email
-
-
+            if (mailItem is null) { /*Debug.Print("reviewing no mail item...?");*/ return; } // Not editing a new email
+            
             // Check if heading outside of Raytheon
-            int tempCount = numExternal;
-            countExternalRecipients(emailMsg);
-            if (tempCount != numExternal) { statusChange = true; }
+            int count = 0;
+            const string PR_SMTP_ADDRESS =
+                "http://schemas.microsoft.com/mapi/proptag/0x39FE001E";
 
+            Outlook.Recipients recips = null;
+            //Globals.ThisAddIn.mainThread.Send((s) =>
+            //{
+            recips = mailItem.Recipients;
+
+            //}, null);
+
+            foreach (Outlook.Recipient recip in recips)
+            {
+                if (recip.Address != null) // Check for invalid email addresses
+                {
+                    Outlook.PropertyAccessor pa = recip.PropertyAccessor;
+
+                    try
+                    {
+                        string smtpAddress =
+                            pa.GetProperty(PR_SMTP_ADDRESS).ToString();
+                        if (!smtpAddress.EndsWith("@raytheon.com"))
+                        {
+                            count++;
+                        }
+                    }
+                    catch (System.Runtime.InteropServices.COMException e)
+                    {
+                        Debug.Print("oh no....it's happenning again....");
+                    }
+                    catch (Exception e)
+                    {
+                        throw e;
+                    }
+                }
+            }
+
+            if (count != numExternal) { statusChange = true; numExternal = count; }
+            
             // If we are heading outside of Raytheon, are we showing some security options?
             if (addInVisible != (numExternal > 0))
             {
@@ -653,23 +664,23 @@ and done!
             }
 
             // Are we adding any attachments?
-            if (emailMsg.Attachments.Count != attachmentsCount)
+            if (mailItem.Attachments.Count != attachmentsCount)
             {
-                attachmentsCount = emailMsg.Attachments.Count;
+                attachmentsCount = mailItem.Attachments.Count;
                 statusChange = true;
 
                 int currentTotalSize = 0;
-                foreach (Outlook.Attachment attach in emailMsg.Attachments) { currentTotalSize += attach.Size; }
+                foreach (Outlook.Attachment attach in mailItem.Attachments) { currentTotalSize += attach.Size; }
 
                 totalSizeAttached = (int)Math.Round(currentTotalSize / 1024.0);
             }
 
-            if (emailMsg.Subject != null)
+            if (mailItem.Subject != null)
             {
-                emailMsg.Subject = emailMsg.Subject.Replace("[RMSG]", "[RSMG]"); // Fix common typos
-                emailMsg.Subject = emailMsg.Subject.Replace("[PGPWM]", "[RSMG]"); // Let's replace the old keywords while we are at it.
+                mailItem.Subject = mailItem.Subject.Replace("[RMSG]", "[RSMG]"); // Fix common typos
+                mailItem.Subject = mailItem.Subject.Replace("[PGPWM]", "[RSMG]"); // Let's replace the old keywords while we are at it.
 
-                bool subjectSet = emailMsg.Subject.Contains("[RSMG]");
+                bool subjectSet = mailItem.Subject.Contains("[RSMG]");
 
                 if (subjectSet)
                 {
@@ -677,7 +688,7 @@ and done!
 
                     if (!addInActive)
                     {
-                        setSecure(editor, true);
+                        setSecure(true);
                         statusChange = true;
                         addInActive = true;
                     }
@@ -699,9 +710,8 @@ and done!
 
         // Start Add-In features and logic functions...
 
-        internal static void setSecure(object editorWindow, bool set)
+        internal void setSecure(bool set)
         {
-            Outlook.MailItem mailItem = ThisAddIn.GetMailItem(editorWindow);
             if (mailItem == null)
             {
                 Debug.Print("Error passing handle to container.");
@@ -794,7 +804,7 @@ and done!
         internal void updateState(bool set)
         {
             addInActive = set;
-            setSecure(editor, set);
+            setSecure(set);
             refreshPane();
             getSecureSendPane.setBox_addInActive(addInActive);
             secureSendRibbon.Ribbon?.InvalidateControl("toggleAddInActive");
@@ -804,7 +814,7 @@ and done!
         internal secureSendPane getSecureSendPane { get => taskPane.Control as secureSendPane; }
         void TaskPane_VisibleChanged(object sender, EventArgs e) { showPane = taskPane.Visible; secureSendRibbon.Ribbon?.InvalidateControl("toggleButton1"); }
 
-        internal static editorWrapper getWrapper(Office.IRibbonControl control) { foreach (editorWrapper item in Globals.ThisAddIn.editorWrapperCollection.Values) { if (item.editor == control.Context) return item; } return null; }
+        internal static editorWrapper getWrapper(Office.IRibbonControl control) { foreach (editorWrapper item in Globals.ThisAddIn.editorWrapperCollection.Values) { if (item.mailItem.Application.ActiveWindow() == control.Context) return item; } return null; }
 
         internal bool toggleDelay { get => delaySet; set => delaySet = value; }
         public bool addInActive { get => msgSetSecure; set => msgSetSecure = value; }
@@ -816,6 +826,9 @@ and done!
         public int attachmentsCount { get => numAttached; set => numAttached = value; }
 
         public CustomTaskPane getTaskPane { get => taskPane; }
+
+        internal void runTimer() { pollTimer.Enabled = true; }
+        internal void pauseTimer() { pollTimer.Enabled = false; }
     }
 }
 #pragma warning restore IDE1006 // Naming Styles
