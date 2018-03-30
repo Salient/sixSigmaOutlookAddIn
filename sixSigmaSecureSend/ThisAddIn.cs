@@ -1,18 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
-using Outlook = Microsoft.Office.Interop.Outlook;
-using Word = Microsoft.Office.Interop.Word;
-using Office = Microsoft.Office.Core;
-using Microsoft.Office.Tools;
-using System.Diagnostics;
-
-
-using Timer = System.Timers.Timer;
-using System.Threading.Tasks;
-using System.Threading;
-using System.IO;
-using System.Collections;
+﻿using Microsoft.Office.Tools;
 using Shell32;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Threading;
+using Office = Microsoft.Office.Core;
+using Outlook = Microsoft.Office.Interop.Outlook;
+using Timer = System.Timers.Timer;
+using Word = Microsoft.Office.Interop.Word;
 
 
 // APP FEATURE LIST
@@ -41,7 +38,7 @@ namespace sixSigmaSecureSend
         //private System.Windows.Forms.Form dummyForm = null;
 
         // Need a place to store state information for each editor.
-        private Dictionary<int, editorWrapper> editorWrapperCollection = new Dictionary<int, editorWrapper>();
+        internal Dictionary<int, editorWrapper> editorWrapperCollection = new Dictionary<int, editorWrapper>();
 
         private string secureTempPath = @"%localappdata%\Temporary Internet Files\Content.Outlook\SSSS";
         private DirectoryInfo secureFolder;
@@ -132,7 +129,7 @@ namespace sixSigmaSecureSend
 
                 // Register mail item callbacks
                 mailItem.Open += (ref bool s) => { newWrapper.addInVisible = newWrapper.getTaskPane.Visible = false; }; // Prevent ribbon options from blinking when changing drafts
-                mailItem.AttachmentAdd += newWrapper.checkClassification;
+                mailItem.AttachmentAdd += newWrapper.examineAttachment;
                 mailItem.Unload += newWrapper.deconstructWrapper;
 
                 // That's a wrap
@@ -166,7 +163,7 @@ namespace sixSigmaSecureSend
 
                 // Register mail item callbacks
                 mailItem.Open += (ref bool b) => { newWrapper.addInVisible = newWrapper.getTaskPane.Visible = false; }; // Prevent ribbon options from blinking when changing drafts
-                mailItem.AttachmentAdd += newWrapper.checkClassification;
+                mailItem.AttachmentAdd += newWrapper.examineAttachment;
                 // mailItem.Unload += newWrapper.deconstructWrapper;
 
                 // That's a wrap
@@ -219,12 +216,57 @@ namespace sixSigmaSecureSend
             Dictionary<string, string> metaInfo;
             string securePath;
             classificationData classification;
-            attachmentInfo(Dictionary<string, string> newinfo)
+
+            bool isInline;
+
+            private attachmentInfo(Dictionary<string, string> newinfo)
             {
                 metaInfo = newinfo;
-                if (newinfo.ContainsKey("Path")) { securePath = newinfo["Path"]; }
-                // TODO 
-                // scan all tags for classification data. assign blank or invalid object
+
+                if (!newinfo.ContainsKey("Path") || newinfo["Path"] == "") { throw new InvalidDataException(); }
+
+                securePath = newinfo["Path"];
+
+                foreach (string tag in newinfo.Keys) // Classifier line could be in several places, we have to search everywhere for it
+                {
+                    if (tag.Contains("rtnipcontrolcode") || tag.Contains("rtnexportcontrolcountry")) { classification = new classificationData(newinfo[tag]); }
+                }
+
+                if (classification is null)
+                {
+                    classification = new classificationData();
+                    Debug.Print("unclassified attachment found.");
+                }
+            }
+
+            internal attachmentInfo(Outlook.Attachment newAttachment)
+            {
+
+            }
+
+            private bool checkIfInline(Outlook.Attachment att)
+            {
+                switch (att.Type)
+                {
+                    case Outlook.OlAttachmentType.olEmbeddeditem:
+                    case Outlook.OlAttachmentType.olByReference:
+                    case Outlook.OlAttachmentType.olOLE:
+                        return true;
+                }
+
+                Outlook.PropertyAccessor prop = att.PropertyAccessor;
+                object emCID = prop.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001E");
+                string emMime = (prop.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x370E001E") != null ? att.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x370E001E").ToString() : "");
+
+                if (!att.Type.Equals(Microsoft.Office.Interop.Outlook.OlAttachmentType.olOLE) 
+                    && (!emMime.ToLower().Contains("image") || (emCID == null || (emCID.Equals("")))))
+                {
+                    return true;
+                }
+                
+                if (prop.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3713001E") is null || prop.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x37140003") == 4) { return true; }
+
+                return false;
             }
 
             internal class classificationData
@@ -233,7 +275,7 @@ namespace sixSigmaSecureSend
                 bool validClassification;
                 bool emptyClassification;
 
-                classificationData()
+                internal classificationData()
                 {
                     classificationData temp = new classificationData(true);
                     controlCodes = temp.controlCodes;
@@ -265,10 +307,10 @@ namespace sixSigmaSecureSend
                 }
 
 
-                classificationData(string data)
+                internal classificationData(string data)
                 {
                     classificationData temp = parseClassification(data);
-                    
+
                     controlCodes = temp.controlCodes;
                     validClassification = temp.validClassification;
                     emptyClassification = temp.emptyClassification;
@@ -294,7 +336,7 @@ namespace sixSigmaSecureSend
                     for (int x = 0; x < 5; x++)
                     {
                         string code = keywords[x];
-                        if (code == "") { continue; }
+                        if (String.IsNullOrEmpty(code)) { continue; }
                         string[] codeparts = code.Split(':');
                         if (codeparts.Length != 2) { continue; }
                         if (tempObject.controlCodes.ContainsKey(codeparts[0])) { tempObject.controlCodes[codeparts[0]] = codeparts[1]; }
@@ -317,11 +359,11 @@ namespace sixSigmaSecureSend
                         && controlCodes.ContainsKey("rtnexportcontrolcode")
                         && controlCodes.ContainsKey("rtnexportcontrolcodevm"))) { return; } // Must contain exactly these keys, no more, no less
 
-                    emptyClassification = false; 
+                    emptyClassification = false;
 
                     // Validate proper values for each property
 
-                    switch(controlCodes["rtnipcontrolcode"])
+                    switch (controlCodes["rtnipcontrolcode"])
                     {
                         case "internaluseonly":
                         case "mostprivate":
@@ -373,12 +415,44 @@ namespace sixSigmaSecureSend
                 }
 
             }
+
+            internal static attachmentInfo getAttachmentInfo(string sFile)
+            {
+                if (sFile is null || sFile.Length <= 0) { throw new ArgumentNullException("File path"); }
+
+
+                Dictionary<string, string> fileMetaData = new Dictionary<string, string>();
+
+                //try
+                //{
+                // Creating a ShellClass Object from the Shell32
+                Shell32.Shell sh = new Shell();
+                // Creating a Folder Object from Folder that inculdes the File
+                Folder dir = sh.NameSpace(Path.GetDirectoryName(sFile));
+                // Creating a new FolderItem from Folder that includes the File
+                FolderItem item = dir.ParseName(Path.GetFileName(sFile));
+
+                for (int x = 0; x < int.MaxValue; x++)
+                {
+                    if (dir.GetDetailsOf(null, x) is "") { break; }
+                    else { fileMetaData.Add(dir.GetDetailsOf(null, x), dir.GetDetailsOf(item, x)); }
+                }
+                //}
+                //catch (Exception)
+                //{
+
+                //}
+
+                return new attachmentInfo(fileMetaData);
+            }
         }
 
 
         // Getting all the available Information of a File into a Arraylist
         internal static ArrayList GetDetailedFileInfo(string sFile)
         {
+            // Function is debug. Remove
+
             if (sFile is null)
             {
                 return new ArrayList();
@@ -404,28 +478,7 @@ namespace sixSigmaSecureSend
                         Debug.Print("(" + x + ") [" + tag + "] " + dir.GetDetailsOf(item, x));
 
                     }
-                    // loop throw the Folder Items
-                    //for (int i = 0; i < 30; i++)
-                    //{
-                    //    // read the current detail Info from the FolderItem Object
-                    //    //(Retrieves details about an item in a folder. 
-                    //    //For example, its size, type, or the time 
-                    //    //of its last modification.)
 
-                    //    // some examples:
-                    //    // 0 Retrieves the name of the item. 
-                    //    // 1 Retrieves the size of the item.
-                    //    // 2 Retrieves the type of the item.
-                    //    // 3 Retrieves the date and time that the item was last modified.
-                    //    // 4 Retrieves the attributes of the item.
-                    //    // -1 Retrieves the info tip information for the item. 
-
-                    //    string det = dir.GetDetailsOf(item, i);
-                    //    // Create a helper Object for holding the current Information
-                    //    // an put it into a ArrayList
-                    //    DetailedFileInfo oFileInfo = new DetailedFileInfo(i, det);
-                    //    aReturn.Add(oFileInfo);
-                    //}
 
                 }
                 catch (Exception)
@@ -436,62 +489,6 @@ namespace sixSigmaSecureSend
             return aReturn;
         }
 
-        internal static attachmentInfo getAttachmentInfo(string sFile)
-        {
-            if (sFile is null) { throw new ArgumentNullException("File path"); }
-
-            if (sFile.Length > 0)
-            {
-                Dictionary<string, string> fileMetaData = new Dictionary<string, string>();
-
-                try
-                {
-                    // Creating a ShellClass Object from the Shell32
-                    Shell32.Shell sh = new Shell();
-                    // Creating a Folder Object from Folder that inculdes the File
-                    Folder dir = sh.NameSpace(Path.GetDirectoryName(sFile));
-                    // Creating a new FolderItem from Folder that includes the File
-                    FolderItem item = dir.ParseName(Path.GetFileName(sFile));
-
-                    for (int x = 0; x < int.MaxValue; x++)
-                    {
-                        if (dir.GetDetailsOf(null, x) is "") { break; }
-                        else { fileMetaData.Add(dir.GetDetailsOf(null, x), dir.GetDetailsOf(item, x)); }
-                    }
-                }
-                catch (Exception)
-                {
-
-                }
-
-            }
-        }
-
-
-        // Helper Class from holding the detailed File Informations
-        // of the System
-        public class DetailedFileInfo
-        {
-            int iID = 0;
-            string sValue = "";
-
-            public int ID
-            {
-                get { return iID; }
-                set { iID = value; }
-            }
-            public string Value
-            {
-                get { return sValue; }
-                set { sValue = value; }
-            }
-
-            public DetailedFileInfo(int ID, string Value)
-            {
-                iID = ID;
-                sValue = Value;
-            }
-        }
 
     }
 
@@ -521,7 +518,7 @@ namespace sixSigmaSecureSend
 
         private bool delaySet = true; // default to delay on
 
-        private Dictionary<string, bool> attachmentClassified;
+        private Dictionary<string, helperFunctions.attachmentInfo> attachmentsInfo;
 
         public editorWrapper(Outlook.MailItem mItem)
         {
@@ -533,7 +530,7 @@ namespace sixSigmaSecureSend
             pollTimer.AutoReset = true;
             pollTimer.Elapsed += reviewEditor;
 
-            attachmentClassified = new Dictionary<string, bool>();
+            attachmentsInfo = new Dictionary<string, helperFunctions.attachmentInfo>();
 
             //Globals.ThisAddIn.mainThread.Send((s) =>
             //{
@@ -560,7 +557,7 @@ namespace sixSigmaSecureSend
             mailItem = null;
         }
 
-        internal void checkClassification(object sender)
+        internal void examineAttachment(object sender)
         {
             //if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
             //{
@@ -571,102 +568,9 @@ namespace sixSigmaSecureSend
             //    return;
             //}
 
-
-            Outlook.Attachment attach = sender as Outlook.Attachment;
-
-            string attachPath = attach.GetTemporaryFilePath();
-            Debug.Print(attach.Type.ToString());
-
-            List<string> arrHeaders = new List<string>();
-
-            ArrayList results = helperFunctions.GetDetailedFileInfo(attachPath);
-
-            //Shell shell = new Shell32.Shell();
-            //Folder attachmentFolder = shell.NameSpace(Path.GetDirectoryName(attachPath));
-            //FolderItem file = attachmentFolder.ParseName(Path.GetFileName(attachPath));
-
-            //for (int i = 0; i < 30; i++)
-            //{
-            //    string det = attachmentFolder.GetDetailsOf(file, i);
-
-            //}
-
+            attachmentsInfo.Add((sender as Outlook.Attachment).FileName, new helperFunctions.attachmentInfo(sender as Outlook.Attachment));
+            
         }
-        //for (int i = 0; i < short.MaxValue; i++)
-        //{
-
-        //    string header = objFolder.GetDetailsOf(null, i);
-        //    if (String.IsNullOrEmpty(header))
-        //        break;
-        //    arrHeaders.Add(header);
-
-        //}
-
-        //foreach (Shell32.FolderItem2 item in objFolder.Items())
-        //{
-        //    for (int i = 0; i < arrHeaders.Count; i++)
-        //    {
-        //        Console.WriteLine(
-        //          $"{i}\t{arrHeaders[i]}: {objFolder.GetDetailsOf(item, i)}");
-        //    }
-        //}
-
-
-        //Debug.Print("Attachment: " + attach.DisplayName + ", " + attach.Position + ", " + attach.Type);
-
-
-        //Outlook.PropertyAccessor test = attach.PropertyAccessor;
-
-        //dynamic results = test.GetProperties("http://schemas.microsoft.com/mapi/proptag");
-
-        //Debug.Print(attach.PropertyAccessor.GetProperties("http://schemas.microsoft.com/mapi/proptag"));
-
-
-        //var shellAppType = Type.GetTypeFromProgID("Shell.Application");
-        //dynamic shellApp = Activator.CreateInstance(shellAppType);
-        //var folder = shellApp.Namespace(attach.GetTemporaryFilePath());
-        //foreach (var item in folder.Items())
-        //{
-        //    var company = item.ExtendedProperty("Company");
-        //    var author = item.ExtendedProperty("Author");
-        //    // Etc.
-        //}
-        //attach.PropertyAccessor.GetProperties.
-        //folder.
-        //var folder = new Shell().Namespace(attach.PathName);
-
-        //attach.Session
-        /*
-        attach.Size;
-        attach.DisplayName;
-        attach.Position;
-        attach.PropertyAccessor;
-        attach.Type;
-
-
-
-
-    I looked into the shellfile class a little more. The answer was staring me right in the face.
-    string[] keywords = new string[x];
-    var shellFile = ShellFile.FromFilePath(file);
-    shellFile.Properties.System.Keywords.Value = keywords;
-
-
-    to get the keywords already added to the file use:
-    var tags = (string[])shellFile.Properties.System.Keywords.ValueAsObject;
-    tags = tags ?? new string[0];
-
-    if (tags.Length != 0)
-    {
-    foreach (string str in tags)
-    {
-    // code here
-    }
-    }
-
-
-    and done!
-    */
 
 
         private void countExternalRecipients(object emailMsg)
